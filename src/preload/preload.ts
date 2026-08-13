@@ -12,6 +12,7 @@ const api: WorkestratorApi = {
   fetchPullRequests: () => ipcRenderer.invoke(IpcChannel.FetchPullRequests),
   listOpencodeAgents: () => ipcRenderer.invoke(IpcChannel.ListOpencodeAgents),
   getAgentSettings: () => ipcRenderer.invoke(IpcChannel.GetAgentSettings),
+  loadAgentConfiguration: () => ipcRenderer.invoke(IpcChannel.LoadAgentConfiguration),
   setAgentSetting: (action, agentName) =>
     ipcRenderer.invoke(IpcChannel.SetAgentSetting, action, agentName),
   startReview: (request) => ipcRenderer.invoke(IpcChannel.StartReview, request),

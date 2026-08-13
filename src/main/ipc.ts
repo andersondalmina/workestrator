@@ -17,6 +17,7 @@ import {
   assignAgent,
   getSettings,
   listOpencodeAgents,
+  loadAgentConfiguration,
 } from "./services/agentSettingsService";
 
 const AGENT_ACTIONS = new Set<AgentAction>(["reviewer", "fixer"]);
@@ -70,14 +71,16 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IpcChannel.GetAgentSettings, () => getSettings());
 
-  ipcMain.handle(IpcChannel.SetAgentSetting, (_event, action: unknown, agentName: unknown) => {
+  ipcMain.handle(IpcChannel.LoadAgentConfiguration, () => loadAgentConfiguration());
+
+  ipcMain.handle(IpcChannel.SetAgentSetting, async (_event, action: unknown, agentName: unknown) => {
     if (typeof action !== "string" || !AGENT_ACTIONS.has(action as AgentAction)) {
       throw new Error(`Not a board action: ${String(action)}`);
     }
     if (agentName !== null && typeof agentName !== "string") {
       throw new Error(`Not an agent name: ${String(agentName)}`);
     }
-    assignAgent(action as AgentAction, agentName);
+    await assignAgent(action as AgentAction, agentName);
   });
 
   ipcMain.handle(IpcChannel.StartReview, (_event, request: unknown) =>

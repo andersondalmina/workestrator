@@ -87,6 +87,8 @@ export interface WorkspaceState {
   agentsLoading: boolean;
   /** Why the agent list could not be read, e.g. opencode is not installed. */
   agentsError: string | null;
+  /** Why the last agent assignment could not be saved. */
+  agentSettingError: string | null;
   /**
    * The reviews run against each pull request, newest first, keyed by the id
    * of the pull request they were run for. Kept beside the cards rather than
@@ -123,6 +125,7 @@ export const initialState: WorkspaceState = {
   agentSettings: NO_AGENT_SETTINGS,
   agentsLoading: true,
   agentsError: null,
+  agentSettingError: null,
   reviews: {},
   openReview: null,
   openReviewBusy: false,
@@ -165,10 +168,16 @@ export type WorkspaceAction =
       type: "agentsLoaded";
       agents: OpencodeAgent[];
       settings: AgentSettings;
+      agentsError: string | null;
     }
-  | { type: "agentsLoadFailed"; message: string }
   | { type: "agentAssigned"; action: AgentAction; agentName: string | null }
-  | { type: "agentSettingFailed"; message: string }
+  | {
+      type: "agentSettingFailed";
+      action: AgentAction;
+      previous: string | null;
+      message: string;
+    }
+  | { type: "dismissAgentSettingError" }
   | { type: "reviewsLoaded"; reviews: ReviewSummary[] }
   | { type: "reviewChanged"; review: ReviewSummary }
   | { type: "reviewOpened" }
@@ -397,14 +406,8 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
         opencodeAgents: action.agents,
         agentSettings: action.settings,
         agentsLoading: false,
-        agentsError: null,
-      };
-
-    case "agentsLoadFailed":
-      return {
-        ...state,
-        agentsLoading: false,
-        agentsError: action.message,
+        agentsError: action.agentsError,
+        agentSettingError: null,
       };
 
     case "agentAssigned":
@@ -414,10 +417,21 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
           ...state.agentSettings,
           [action.action]: action.agentName,
         },
+        agentSettingError: null,
       };
 
     case "agentSettingFailed":
-      return { ...state, agentsError: action.message };
+      return {
+        ...state,
+        agentSettings: {
+          ...state.agentSettings,
+          [action.action]: action.previous,
+        },
+        agentSettingError: action.message,
+      };
+
+    case "dismissAgentSettingError":
+      return { ...state, agentSettingError: null };
 
     case "reviewsLoaded":
       return { ...state, reviews: groupReviews(action.reviews) };

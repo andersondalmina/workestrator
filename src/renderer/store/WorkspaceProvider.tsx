@@ -17,6 +17,7 @@ import {
 } from "./selectors";
 import {
   initialState,
+  NO_AGENT_SETTINGS,
   storedProjectId,
   workspaceReducer,
   type WorkspaceState,
@@ -87,6 +88,7 @@ export interface WorkspaceValue extends WorkspaceState {
   dismissFetchNotice: () => void;
   /** Puts an OpenCode agent behind a board action, or clears it with `null`. */
   setAgentSetting: (action: AgentAction, agentName: string | null) => void;
+  dismissAgentSettingError: () => void;
   /** Checks a pull request out and has the review agent read it. */
   startReview: (task: BoardTask) => void;
   /** Stops a review that is still running. How it ended arrives on its own. */
@@ -200,26 +202,43 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
   }, [runFetch]);
 
-  // OpenCode agents and the board actions they sit behind. Both are read
-  // together so a dropdown can never show a selection the list has not loaded
-  // yet. Outside the Electron shell there is no CLI, so the settings screen
-  // opens on an empty list rather than failing.
+  // OpenCode agents and the board actions they sit behind. Saved assignments
+  // always load from the database; listing agents is attempted separately so a
+  // CLI failure does not hide what was already picked. Outside the Electron
+  // shell there is no bridge, so the settings screen opens empty rather than
+  // failing.
   useEffect(() => {
     let cancelled = false;
     const api = window.workestrator;
     if (!api) {
-      dispatch({ type: "agentsLoadFailed", message: "Agents can only be listed in the desktop app" });
+      dispatch({
+        type: "agentsLoaded",
+        agents: [],
+        settings: NO_AGENT_SETTINGS,
+        agentsError: "Agents can only be listed in the desktop app",
+      });
       return;
     }
 
-    Promise.all([api.listOpencodeAgents(), api.getAgentSettings()])
-      .then(([agents, settings]) => {
+    api
+      .loadAgentConfiguration()
+      .then((configuration) => {
         if (cancelled) return;
-        dispatch({ type: "agentsLoaded", agents, settings });
+        dispatch({
+          type: "agentsLoaded",
+          agents: configuration.agents,
+          settings: configuration.settings,
+          agentsError: configuration.agentsError,
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        dispatch({ type: "agentsLoadFailed", message: errorMessage(error) });
+        dispatch({
+          type: "agentsLoaded",
+          agents: [],
+          settings: NO_AGENT_SETTINGS,
+          agentsError: errorMessage(error),
+        });
       });
 
     return () => {
@@ -228,13 +247,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setAgentSetting = useCallback((action: AgentAction, agentName: string | null) => {
+    const previous = agentSettings[action];
     dispatch({ type: "agentAssigned", action, agentName });
     window.workestrator
       ?.setAgentSetting(action, agentName)
       .catch((error: unknown) =>
-        dispatch({ type: "agentSettingFailed", message: errorMessage(error) }),
+        dispatch({
+          type: "agentSettingFailed",
+          action,
+          previous,
+          message: errorMessage(error),
+        }),
       );
-  }, []);
+  }, [agentSettings]);
 
   // Reviews outlive the window that asked for one — they run in the main
   // process — so the board reads what is already recorded and then follows
@@ -493,6 +518,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       fetchPullRequests,
       dismissFetchNotice: () => dispatch({ type: "dismissFetchNotice" }),
       setAgentSetting,
+      dismissAgentSettingError: () => dispatch({ type: "dismissAgentSettingError" }),
       startReview,
       cancelReview,
       openReviewById,

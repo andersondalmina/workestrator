@@ -13,6 +13,7 @@ export const IpcChannel = {
   FetchPullRequests: "pull-requests:fetch",
   ListOpencodeAgents: "agents:list",
   GetAgentSettings: "agents:get-settings",
+  LoadAgentConfiguration: "agents:load",
   SetAgentSetting: "agents:set",
   StartReview: "reviews:start",
   CancelReview: "reviews:cancel",
@@ -51,6 +52,14 @@ export type AgentAction = "reviewer" | "fixer";
  * picked yet.
  */
 export type AgentSettings = Record<AgentAction, string | null>;
+
+/** OpenCode agents plus the board assignments read from the database. */
+export interface AgentConfiguration {
+  agents: OpencodeAgent[];
+  settings: AgentSettings;
+  /** Set when `opencode agent list` could not be read; settings still come from the database. */
+  agentsError: string | null;
+}
 
 /** A CI check as the platform reported it, reduced to what the board shows. */
 export interface RemoteCheck {
@@ -188,6 +197,11 @@ export interface WorkestratorApi {
   listOpencodeAgents(): Promise<OpencodeAgent[]>;
   /** Which OpenCode agent each board action currently runs. */
   getAgentSettings(): Promise<AgentSettings>;
+  /**
+   * Lists OpenCode agents and reads saved assignments. Assignments that no
+   * longer name a known agent are cleared in the database.
+   */
+  loadAgentConfiguration(): Promise<AgentConfiguration>;
   /** Puts an OpenCode agent behind a board action, or clears it with `null`. */
   setAgentSetting(action: AgentAction, agentName: string | null): Promise<void>;
   /**
