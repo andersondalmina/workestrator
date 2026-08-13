@@ -1,0 +1,137 @@
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource-variable/jetbrains-mono";
+@import "tailwindcss";
+@import "./tokens.css";
+
+/*
+ * Tokens stay raw custom properties on :root so the theme can be swapped at
+ * runtime; this layer only gives them Tailwind utility names (bg-panel,
+ * text-fg3, border-lines, ...).
+ */
+@theme {
+  --font-sans: "Instrument Sans Variable", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --color-bg: var(--bg);
+  --color-sunken: var(--sunken);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel2);
+  --color-card: var(--card);
+  --color-cardh: var(--cardh);
+
+  --color-line: var(--line);
+  --color-lines: var(--lines);
+
+  --color-fg: var(--fg);
+  --color-fg2: var(--fg2);
+  --color-fg3: var(--fg3);
+  --color-fg4: var(--fg4);
+
+  --color-blue: var(--blue);
+  --color-orange: var(--orange);
+  --color-violet: var(--violet);
+  --color-green: var(--green);
+  --color-red: var(--red);
+
+  --color-btn: var(--btn);
+  --color-btnfg: var(--btnfg);
+
+  --shadow-card: var(--shadow);
+  --shadow-drawer: -24px 0 48px rgb(0 0 0 / 22%);
+  --shadow-dialog: 0 32px 64px rgb(0 0 0 / 30%);
+  --shadow-menu: 0 18px 36px rgb(0 0 0 / 32%);
+
+  --ease-panel: cubic-bezier(0.22, 0.7, 0.25, 1);
+
+  --animate-wk-in: wkIn 0.26s var(--ease-panel) both;
+  --animate-wk-fade: wkFade 0.18s ease both;
+  --animate-wk-fade-fast: wkFade 0.16s ease both;
+  --animate-wk-pop: wkPop 0.22s var(--ease-panel) both;
+  --animate-wk-pulse: wkPulse 1.4s ease-in-out infinite;
+
+  @keyframes wkIn {
+    from {
+      transform: translateX(26px);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+
+  @keyframes wkFade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes wkPop {
+    from {
+      transform: translateY(10px) scale(0.99);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+
+  @keyframes wkPulse {
+    0% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 0.7;
+    }
+    100% {
+      opacity: 0.3;
+    }
+  }
+}
+
+@layer base {
+  body {
+    @apply m-0 overflow-hidden bg-bg font-sans text-fg antialiased;
+  }
+
+  #root {
+    height: 100vh;
+  }
+
+  a {
+    @apply text-blue no-underline;
+  }
+
+  a:hover {
+    @apply text-fg;
+  }
+
+  input,
+  button,
+  select,
+  textarea {
+    font: inherit;
+    @apply border-none bg-transparent text-inherit outline-none;
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+
+  ::-webkit-scrollbar {
+    @apply h-[11px] w-[11px];
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-lg border-[3px] border-transparent bg-line;
+    background-clip: content-box;
+  }
+}

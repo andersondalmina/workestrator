@@ -1,0 +1,62 @@
+/* Design tokens. Theme is switched by a data attribute on <html>. */
+
+:root {
+  /* Surfaces */
+  --bg: oklch(0.165 0.008 95);
+  --sunken: oklch(0.135 0.008 95);
+  --panel: oklch(0.205 0.008 95);
+  --panel2: oklch(0.245 0.009 95);
+  --card: oklch(0.225 0.008 95);
+  --cardh: oklch(0.265 0.009 95);
+
+  /* Borders */
+  --line: oklch(0.315 0.008 95);
+  --lines: oklch(0.265 0.008 95);
+
+  /* Text, from strongest to faintest */
+  --fg: oklch(0.965 0.004 95);
+  --fg2: oklch(0.8 0.006 95);
+  --fg3: oklch(0.635 0.006 95);
+  --fg4: oklch(0.505 0.006 95);
+
+  /* Status accents */
+  --blue: oklch(0.72 0.13 250);
+  --orange: oklch(0.755 0.13 62);
+  --violet: oklch(0.72 0.13 300);
+  --green: oklch(0.755 0.13 152);
+  --red: oklch(0.68 0.15 25);
+
+  /* Primary button */
+  --btn: oklch(0.965 0.004 95);
+  --btnfg: oklch(0.18 0.008 95);
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 35%);
+
+  /* Board layout */
+  --pad: 14px;
+  --cgap: 10px;
+  --colw: 302px;
+}
+
+:root[data-theme="light"] {
+  --bg: oklch(0.975 0.004 95);
+  --sunken: oklch(0.955 0.005 95);
+  --panel: oklch(1 0 0);
+  --panel2: oklch(0.945 0.005 95);
+  --card: oklch(1 0 0);
+  --cardh: oklch(0.985 0.003 95);
+  --line: oklch(0.885 0.006 95);
+  --lines: oklch(0.925 0.005 95);
+  --fg: oklch(0.235 0.01 95);
+  --fg2: oklch(0.4 0.01 95);
+  --fg3: oklch(0.535 0.008 95);
+  --fg4: oklch(0.645 0.008 95);
+  --blue: oklch(0.55 0.15 250);
+  --orange: oklch(0.585 0.15 55);
+  --violet: oklch(0.53 0.16 300);
+  --green: oklch(0.53 0.14 152);
+  --red: oklch(0.55 0.18 25);
+  --btn: oklch(0.235 0.01 95);
+  --btnfg: oklch(0.99 0 0);
+  --shadow: 0 1px 2px rgb(20 18 14 / 6%), 0 1px 1px rgb(20 18 14 / 4%);
+}
