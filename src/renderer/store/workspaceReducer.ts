@@ -1,13 +1,12 @@
 import { toBoardTasks } from "./pullRequests";
 import { nextColumnId } from "./selectors";
 import type {
-  AgentSkillDraft,
+  AgentAction,
+  AgentSettings,
+  OpencodeAgent,
   PullRequestFailure,
   RemotePullRequest,
   ReviewSummary,
-  SkillAction,
-  SkillAssignments,
-  StoredAgentSkill,
   StoredProject,
   StoredReview,
 } from "../../shared/ipc";
@@ -39,16 +38,9 @@ export interface Notice {
   tone: "green" | "red";
 }
 
-/** An empty skill form, which the settings editor opens on to add one. */
-export const EMPTY_SKILL_DRAFT: AgentSkillDraft = {
-  name: "",
-  description: "",
-  command: "",
-};
-
-export const NO_SKILL_ASSIGNMENTS: SkillAssignments = {
-  review: null,
-  fixComments: null,
+export const NO_AGENT_SETTINGS: AgentSettings = {
+  reviewer: null,
+  fixer: null,
 };
 
 /** Where the chosen theme is kept, so the app opens back on it next launch. */
@@ -87,14 +79,14 @@ export interface WorkspaceState {
   fetchBusy: boolean;
   /** What the last fetch had to say, if anything. */
   fetchNotice: Notice | null;
-  /** The skills the user wrote, as the database has them. */
-  agentSkills: StoredAgentSkill[];
-  /** Which of those skills each board action runs. */
-  skillAssignments: SkillAssignments;
-  /** The skill being written in settings, or `null` when the form is closed. */
-  skillDraft: AgentSkillDraft | null;
-  /** Why the last save was refused, e.g. the name is already taken. */
-  skillError: string | null;
+  /** Primary OpenCode agents available for board actions. */
+  opencodeAgents: OpencodeAgent[];
+  /** Which OpenCode agent each board action runs. */
+  agentSettings: AgentSettings;
+  /** Set while `opencode agent list` is being read. */
+  agentsLoading: boolean;
+  /** Why the agent list could not be read, e.g. opencode is not installed. */
+  agentsError: string | null;
   /**
    * The reviews run against each pull request, newest first, keyed by the id
    * of the pull request they were run for. Kept beside the cards rather than
@@ -118,7 +110,7 @@ export const initialState: WorkspaceState = {
   loading: false,
   openId: null,
   composerOpen: false,
-  form: { title: "", branch: "", skill: "", repo: "" },
+  form: { title: "", branch: "", repo: "" },
   moved: {},
   extra: [],
   fetched: [],
@@ -127,10 +119,10 @@ export const initialState: WorkspaceState = {
   addProjectError: null,
   fetchBusy: false,
   fetchNotice: null,
-  agentSkills: [],
-  skillAssignments: NO_SKILL_ASSIGNMENTS,
-  skillDraft: null,
-  skillError: null,
+  opencodeAgents: [],
+  agentSettings: NO_AGENT_SETTINGS,
+  agentsLoading: true,
+  agentsError: null,
   reviews: {},
   openReview: null,
   openReviewBusy: false,
@@ -170,18 +162,13 @@ export type WorkspaceAction =
     }
   | { type: "dismissFetchNotice" }
   | {
-      type: "agentSkillsLoaded";
-      skills: StoredAgentSkill[];
-      assignments: SkillAssignments;
+      type: "agentsLoaded";
+      agents: OpencodeAgent[];
+      settings: AgentSettings;
     }
-  | { type: "openSkillDraft"; draft: AgentSkillDraft }
-  | { type: "updateSkillDraft"; patch: Partial<AgentSkillDraft> }
-  | { type: "closeSkillDraft" }
-  | { type: "agentSkillSaved"; skill: StoredAgentSkill }
-  | { type: "agentSkillRemoved"; id: number }
-  | { type: "skillAssigned"; action: SkillAction; skillId: number | null }
-  | { type: "skillFailed"; message: string }
-  | { type: "dismissSkillError" }
+  | { type: "agentsLoadFailed"; message: string }
+  | { type: "agentAssigned"; action: AgentAction; agentName: string | null }
+  | { type: "agentSettingFailed"; message: string }
   | { type: "reviewsLoaded"; reviews: ReviewSummary[] }
   | { type: "reviewChanged"; review: ReviewSummary }
   | { type: "reviewOpened" }
@@ -291,7 +278,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
         pr: null,
         prState: "draft",
         prTone: "fg",
-        skill: state.form.skill,
+        skill: undefined,
         status: "Opening pull request",
         tone: "blue",
         time: "now",
@@ -307,7 +294,6 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
         form: {
           title: "",
           branch: "",
-          skill: state.form.skill,
           repo: target.id,
         },
         extra: [...state.extra, created],
@@ -405,72 +391,33 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     case "dismissFetchNotice":
       return { ...state, fetchNotice: null };
 
-    case "agentSkillsLoaded":
+    case "agentsLoaded":
       return {
         ...state,
-        agentSkills: action.skills,
-        skillAssignments: action.assignments,
+        opencodeAgents: action.agents,
+        agentSettings: action.settings,
+        agentsLoading: false,
+        agentsError: null,
       };
 
-    // Opening the form clears whatever the last attempt reported.
-    case "openSkillDraft":
-      return { ...state, skillDraft: action.draft, skillError: null };
-
-    case "updateSkillDraft":
-      return state.skillDraft
-        ? { ...state, skillDraft: { ...state.skillDraft, ...action.patch } }
-        : state;
-
-    case "closeSkillDraft":
-      return { ...state, skillDraft: null, skillError: null };
-
-    // An edit lands in place so the skill keeps its spot in the list; a new
-    // one joins the end, which is the order the database reads them back in.
-    case "agentSkillSaved": {
-      const known = state.agentSkills.some((skill) => skill.id === action.skill.id);
-
+    case "agentsLoadFailed":
       return {
         ...state,
-        agentSkills: known
-          ? state.agentSkills.map((skill) => (skill.id === action.skill.id ? action.skill : skill))
-          : [...state.agentSkills, action.skill],
-        skillDraft: null,
-        skillError: null,
-      };
-    }
-
-    // The database unassigns a deleted skill, so the board actions follow it
-    // here rather than being left pointing at a skill that is gone.
-    case "agentSkillRemoved":
-      return {
-        ...state,
-        agentSkills: state.agentSkills.filter((skill) => skill.id !== action.id),
-        skillAssignments: {
-          review:
-            state.skillAssignments.review === action.id ? null : state.skillAssignments.review,
-          fixComments:
-            state.skillAssignments.fixComments === action.id
-              ? null
-              : state.skillAssignments.fixComments,
-        },
-        // Editing the skill that just went away leaves nothing to save into.
-        skillDraft: state.skillDraft?.id === action.id ? null : state.skillDraft,
+        agentsLoading: false,
+        agentsError: action.message,
       };
 
-    case "skillAssigned":
+    case "agentAssigned":
       return {
         ...state,
-        skillAssignments: {
-          ...state.skillAssignments,
-          [action.action]: action.skillId,
+        agentSettings: {
+          ...state.agentSettings,
+          [action.action]: action.agentName,
         },
       };
 
-    case "skillFailed":
-      return { ...state, skillError: action.message };
-
-    case "dismissSkillError":
-      return { ...state, skillError: null };
+    case "agentSettingFailed":
+      return { ...state, agentsError: action.message };
 
     case "reviewsLoaded":
       return { ...state, reviews: groupReviews(action.reviews) };

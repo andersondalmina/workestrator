@@ -9,7 +9,7 @@ const CHOICE_OFF = "border-lines bg-transparent text-fg3 hover:border-line";
 const EMPTY = "font-sans text-[11.5px] leading-none font-normal text-fg4";
 
 export function ComposerDialog() {
-  const { form, projects, agentSkills, updateForm, closeComposer, submitComposer } = useWorkspace();
+  const { form, projects, updateForm, closeComposer, submitComposer } = useWorkspace();
 
   return (
     <div className="absolute inset-0 z-30 flex items-start justify-center pt-[88px]">
@@ -89,27 +89,6 @@ export function ComposerDialog() {
               placeholder="Rebase and resolve conflicts in queue worker"
             />
           </div>
-
-          <div>
-            <div className={LABEL}>Review skill</div>
-            <div className="flex flex-wrap gap-[7px]">
-              {agentSkills.length === 0 && (
-                <div className={EMPTY}>No skills yet — add one in settings.</div>
-              )}
-              {agentSkills.map((skill) => (
-                <button
-                  key={skill.id}
-                  type="button"
-                  className={`rounded-[7px] border px-[10px] py-[7px] font-mono text-[11.5px] leading-none font-normal ${
-                    form.skill === skill.name ? CHOICE_ON : CHOICE_OFF
-                  }`}
-                  onClick={() => updateForm({ skill: skill.name })}
-                >
-                  {skill.name}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         <footer className="flex items-center gap-2 border-t border-lines px-[18px] py-3">
@@ -127,10 +106,6 @@ export function ComposerDialog() {
           >
             Cancel
           </button>
-          <div className="flex-1" />
-          <span className="font-mono text-[10.5px] leading-none font-normal text-fg4">
-            review skill runs on open
-          </span>
         </footer>
       </div>
     </div>

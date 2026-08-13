@@ -7,9 +7,6 @@
 import { spawn } from "node:child_process";
 import { searchPath } from "./cliPath";
 
-/** The agent that does the reading, as `opencode` has it configured. */
-const REVIEW_AGENT = "code-reviewer";
-
 /**
  * Long enough for an agent to read a sizeable pull request, short enough that a
  * run which has stopped making progress is reported while the user still cares
@@ -24,7 +21,7 @@ const STDERR_LIMIT = 4_000;
 export const CANCELLED = "This review was cancelled";
 
 /**
- * Runs `opencode run --agent code-reviewer --format json <url>` in `cwd` and
+ * Runs `opencode run --agent <name> --format json <url>` in `cwd` and
  * answers with the review it wrote. Rejects with a message meant for the user
  * when there is no review to answer with.
  *
@@ -36,14 +33,19 @@ export const CANCELLED = "This review was cancelled";
  * Aborting `signal` kills the agent. Like the timeout, that answers with
  * whatever it had already written rather than throwing it away.
  */
-export function runReviewAgent(cwd: string, url: string, signal: AbortSignal): Promise<string> {
+export function runReviewAgent(
+  cwd: string,
+  url: string,
+  agentName: string,
+  signal: AbortSignal,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(new Error(CANCELLED));
       return;
     }
 
-    const child = spawn("opencode", ["run", "--agent", REVIEW_AGENT, "--format", "json", url], {
+    const child = spawn("opencode", ["run", "--agent", agentName, "--format", "json", url], {
       cwd,
       windowsHide: true,
       env: { ...process.env, PATH: searchPath() },

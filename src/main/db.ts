@@ -7,11 +7,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { app } from "electron";
 import type {
+  AgentAction,
+  AgentSettings,
   ReviewStatus,
   ReviewSummary,
-  SkillAction,
-  SkillAssignments,
-  StoredAgentSkill,
   StoredProject,
   StoredReview,
 } from "../shared/ipc";
@@ -23,9 +22,6 @@ interface ProjectRow {
   repository_link: string;
   local_path: string;
 }
-
-/** A row of `agent_skills`. Its columns already match the shared shape. */
-type AgentSkillRow = StoredAgentSkill;
 
 /** A row of `pull_request_reviews`, with the review text left out. */
 interface ReviewRow {
@@ -41,14 +37,13 @@ interface ReviewRow {
 }
 
 const SELECT_COLUMNS = "id, name, repository_link, local_path";
-const SKILL_COLUMNS = "id, name, description, command";
 const REVIEW_COLUMNS =
   "id, project_id, pull_request_id, pull_request_number, branch, status, worktree_path, started_at, finished_at";
 
-/** The `app_settings` key each board action's chosen skill is stored under. */
-const ASSIGNMENT_KEY: Record<SkillAction, string> = {
-  review: "skill.review",
-  fixComments: "skill.fixComments",
+/** The `app_settings` key each board action's chosen agent is stored under. */
+const AGENT_SETTING_KEY: Record<AgentAction, string> = {
+  reviewer: "agent.reviewer",
+  fixer: "agent.fixer",
 };
 
 let db: DatabaseSync | null = null;
@@ -213,118 +208,44 @@ export function createProject(
   return { id: Number(lastInsertRowid), name, repositoryLink, localPath };
 }
 
-/** Every skill the user wrote, oldest first. */
-export function listAgentSkills(): StoredAgentSkill[] {
-  return openDatabase()
-    .prepare(`SELECT ${SKILL_COLUMNS} FROM agent_skills ORDER BY id`)
-    .all() as unknown as AgentSkillRow[];
-}
-
-export function getAgentSkill(id: number): StoredAgentSkill | null {
-  const row = openDatabase()
-    .prepare(`SELECT ${SKILL_COLUMNS} FROM agent_skills WHERE id = ?`)
-    .get(id) as unknown as AgentSkillRow | undefined;
-  return row ?? null;
-}
-
-/**
- * Inserts a skill. Names are unique so the two board actions always name
- * something distinct in the settings list.
- */
-export function createAgentSkill(
-  name: string,
-  description: string,
-  command: string,
-): StoredAgentSkill {
-  const database = openDatabase();
-  requireFreeName(name, null);
-
-  const { lastInsertRowid } = database
-    .prepare("INSERT INTO agent_skills (name, description, command) VALUES (?, ?, ?)")
-    .run(name, description, command);
-
-  return { id: Number(lastInsertRowid), name, description, command };
-}
-
-/** Rewrites a skill in place, keeping its id so assignments survive an edit. */
-export function updateAgentSkill(
-  id: number,
-  name: string,
-  description: string,
-  command: string,
-): StoredAgentSkill {
-  const database = openDatabase();
-  if (!getAgentSkill(id)) throw new Error("That skill no longer exists");
-  requireFreeName(name, id);
-
-  database
-    .prepare("UPDATE agent_skills SET name = ?, description = ?, command = ? WHERE id = ?")
-    .run(name, description, command, id);
-
-  return { id, name, description, command };
-}
-
-/**
- * Removes a skill and unassigns it everywhere, so no board action is left
- * pointing at a skill that is not there any more.
- */
-export function deleteAgentSkill(id: number): void {
-  const database = openDatabase();
-  database.prepare("DELETE FROM agent_skills WHERE id = ?").run(id);
-  database
-    .prepare("DELETE FROM app_settings WHERE key IN (?, ?) AND value = ?")
-    .run(ASSIGNMENT_KEY.review, ASSIGNMENT_KEY.fixComments, String(id));
-}
-
-/** Rejects a name another skill already answers to. */
-function requireFreeName(name: string, exceptId: number | null): void {
-  const clash = openDatabase()
-    .prepare("SELECT id FROM agent_skills WHERE name = ? AND id IS NOT ?")
-    .get(name, exceptId) as unknown as { id: number } | undefined;
-
-  if (clash) throw new Error(`A skill named ${name} already exists`);
-}
-
-/**
- * Which skill each board action runs. A key that was never set, or that names
- * a skill since deleted, reads as unassigned.
- */
-export function getSkillAssignments(): SkillAssignments {
+/** Which OpenCode agent each board action runs. */
+export function getAgentSettings(): AgentSettings {
   return {
-    review: readAssignment("review"),
-    fixComments: readAssignment("fixComments"),
+    reviewer: readAgentSetting("reviewer"),
+    fixer: readAgentSetting("fixer"),
   };
 }
 
-/** Puts a skill behind a board action, or clears it with `null`. */
-export function setSkillAssignment(action: SkillAction, skillId: number | null): void {
+/** Puts an OpenCode agent behind a board action, or clears it with `null`. */
+export function setAgentSetting(action: AgentAction, agentName: string | null): void {
   const database = openDatabase();
-  const key = ASSIGNMENT_KEY[action];
+  const key = AGENT_SETTING_KEY[action];
 
-  if (skillId === null) {
+  if (agentName === null) {
     database.prepare("DELETE FROM app_settings WHERE key = ?").run(key);
     return;
   }
 
-  if (!getAgentSkill(skillId)) throw new Error("That skill no longer exists");
+  const trimmed = agentName.trim();
+  if (!trimmed) throw new Error("An agent name cannot be empty");
 
   database
     .prepare(
       `INSERT INTO app_settings (key, value) VALUES (?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
     )
-    .run(key, String(skillId));
+    .run(key, trimmed);
 }
 
-function readAssignment(action: SkillAction): number | null {
+function readAgentSetting(action: AgentAction): string | null {
   const row = openDatabase()
     .prepare("SELECT value FROM app_settings WHERE key = ?")
-    .get(ASSIGNMENT_KEY[action]) as unknown as { value: string } | undefined;
+    .get(AGENT_SETTING_KEY[action]) as unknown as { value: string } | undefined;
 
   if (!row) return null;
 
-  const id = Number(row.value);
-  return Number.isInteger(id) && getAgentSkill(id) ? id : null;
+  const name = row.value.trim();
+  return name || null;
 }
 
 /** What a review is recorded as when it starts, before there is anything to say. */

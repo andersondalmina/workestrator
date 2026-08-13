@@ -16,18 +16,12 @@ import {
   type ColumnWithTasks,
 } from "./selectors";
 import {
-  EMPTY_SKILL_DRAFT,
   initialState,
   storedProjectId,
   workspaceReducer,
   type WorkspaceState,
 } from "./workspaceReducer";
-import type {
-  AgentSkillDraft,
-  ReviewSummary,
-  SkillAction,
-  StoredAgentSkill,
-} from "../../shared/ipc";
+import type { AgentAction, ReviewSummary } from "../../shared/ipc";
 import type { BoardTask, ChipId, ComposerForm, Project, Screen, Theme } from "../types";
 
 /** How long the board shows its skeleton when the scope changes. */
@@ -58,10 +52,10 @@ export interface WorkspaceValue extends WorkspaceState {
   allTaskCount: number;
   isFiltered: boolean;
   selectedTask: BoardTask | null;
-  /** The skill "Start review" runs, or `null` while none is assigned. */
-  reviewSkill: StoredAgentSkill | null;
-  /** The skill "Fix comments" runs, or `null` while none is assigned. */
-  fixCommentsSkill: StoredAgentSkill | null;
+  /** The OpenCode agent the Reviewer action runs, or `null` while none is set. */
+  reviewerAgent: string | null;
+  /** The OpenCode agent the Fixed action runs, or `null` while none is set. */
+  fixerAgent: string | null;
   /** The pull requests an agent is reading right now. */
   reviewingIds: Set<string>;
   /** Every review run against a pull request, newest first. */
@@ -91,18 +85,8 @@ export interface WorkspaceValue extends WorkspaceState {
   /** Reads the open pull requests of every project through `gh` and `glab`. */
   fetchPullRequests: () => void;
   dismissFetchNotice: () => void;
-  /** Opens the settings form on a blank skill. */
-  newAgentSkill: () => void;
-  /** Opens the settings form on a skill that already exists. */
-  editAgentSkill: (skill: StoredAgentSkill) => void;
-  updateSkillDraft: (patch: Partial<AgentSkillDraft>) => void;
-  closeSkillDraft: () => void;
-  /** Saves whatever the form holds, creating or rewriting a skill. */
-  saveSkillDraft: () => void;
-  removeAgentSkill: (id: number) => void;
-  /** Puts a skill behind a board action, or clears it with `null`. */
-  assignSkill: (action: SkillAction, skillId: number | null) => void;
-  dismissSkillError: () => void;
+  /** Puts an OpenCode agent behind a board action, or clears it with `null`. */
+  setAgentSetting: (action: AgentAction, agentName: string | null) => void;
   /** Checks a pull request out and has the review agent read it. */
   startReview: (task: BoardTask) => void;
   /** Stops a review that is still running. How it ended arrives on its own. */
@@ -130,9 +114,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     moved,
     projects,
     addProjectBusy,
-    agentSkills,
-    skillAssignments,
-    skillDraft,
+    agentSettings,
     reviews,
     openReview,
   } = state;
@@ -218,22 +200,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
   }, [runFetch]);
 
-  // The user's own skills and the board actions they sit behind. Both are read
-  // together so an action can never be shown running a skill the list has not
-  // loaded yet. Outside the Electron shell there is no database, so the
-  // settings screen opens on an empty list rather than failing.
+  // OpenCode agents and the board actions they sit behind. Both are read
+  // together so a dropdown can never show a selection the list has not loaded
+  // yet. Outside the Electron shell there is no CLI, so the settings screen
+  // opens on an empty list rather than failing.
   useEffect(() => {
     let cancelled = false;
     const api = window.workestrator;
-    if (!api) return;
+    if (!api) {
+      dispatch({ type: "agentsLoadFailed", message: "Agents can only be listed in the desktop app" });
+      return;
+    }
 
-    Promise.all([api.listAgentSkills(), api.getSkillAssignments()])
-      .then(([skills, assignments]) => {
+    Promise.all([api.listOpencodeAgents(), api.getAgentSettings()])
+      .then(([agents, settings]) => {
         if (cancelled) return;
-        dispatch({ type: "agentSkillsLoaded", skills, assignments });
+        dispatch({ type: "agentsLoaded", agents, settings });
       })
       .catch((error: unknown) => {
-        console.error("Could not load skills", error);
+        if (cancelled) return;
+        dispatch({ type: "agentsLoadFailed", message: errorMessage(error) });
       });
 
     return () => {
@@ -241,40 +227,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // The database is what decides whether a skill is valid — it owns the unique
-  // name — so the list is only updated once it has answered.
-  const saveSkillDraft = useCallback(() => {
-    if (!skillDraft) return;
-
-    const api = window.workestrator;
-    if (!api) {
-      dispatch({
-        type: "skillFailed",
-        message: "Skills can only be saved in the desktop app",
-      });
-      return;
-    }
-
-    api
-      .saveAgentSkill(skillDraft)
-      .then((skill) => dispatch({ type: "agentSkillSaved", skill }))
-      .catch((error: unknown) => dispatch({ type: "skillFailed", message: errorMessage(error) }));
-  }, [skillDraft]);
-
-  // The row goes away in the background, as a forgotten project does: it comes
-  // back on the next launch if the delete never landed.
-  const removeAgentSkill = useCallback((id: number) => {
-    dispatch({ type: "agentSkillRemoved", id });
-    window.workestrator?.deleteAgentSkill(id).catch((error: unknown) => {
-      console.error("Could not delete skill", error);
-    });
-  }, []);
-
-  const assignSkill = useCallback((action: SkillAction, skillId: number | null) => {
-    dispatch({ type: "skillAssigned", action, skillId });
+  const setAgentSetting = useCallback((action: AgentAction, agentName: string | null) => {
+    dispatch({ type: "agentAssigned", action, agentName });
     window.workestrator
-      ?.assignSkill(action, skillId)
-      .catch((error: unknown) => dispatch({ type: "skillFailed", message: errorMessage(error) }));
+      ?.setAgentSetting(action, agentName)
+      .catch((error: unknown) =>
+        dispatch({ type: "agentSettingFailed", message: errorMessage(error) }),
+      );
   }, []);
 
   // Reviews outlive the window that asked for one — they run in the main
@@ -384,20 +343,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [reviews],
   );
 
-  const skillById = useCallback(
-    (id: number | null) => agentSkills.find((skill) => skill.id === id) ?? null,
-    [agentSkills],
-  );
-
-  const reviewSkill = useMemo(
-    () => skillById(skillAssignments.review),
-    [skillById, skillAssignments.review],
-  );
-
-  const fixCommentsSkill = useMemo(
-    () => skillById(skillAssignments.fixComments),
-    [skillById, skillAssignments.fixComments],
-  );
+  const reviewerAgent = agentSettings.reviewer;
+  const fixerAgent = agentSettings.fixer;
 
   // Everything the session added to the board: composed pull requests first,
   // then the ones the last fetch read from GitHub and GitLab.
@@ -520,8 +467,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       allTaskCount,
       isFiltered: query.length > 0 || chip !== "all",
       selectedTask,
-      reviewSkill,
-      fixCommentsSkill,
+      reviewerAgent,
+      fixerAgent,
       reviewingIds,
       reviewsFor,
 
@@ -545,14 +492,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       dismissAddProjectError: () => dispatch({ type: "dismissAddProjectError" }),
       fetchPullRequests,
       dismissFetchNotice: () => dispatch({ type: "dismissFetchNotice" }),
-      newAgentSkill: () => dispatch({ type: "openSkillDraft", draft: EMPTY_SKILL_DRAFT }),
-      editAgentSkill: (skill) => dispatch({ type: "openSkillDraft", draft: { ...skill } }),
-      updateSkillDraft: (patch) => dispatch({ type: "updateSkillDraft", patch }),
-      closeSkillDraft: () => dispatch({ type: "closeSkillDraft" }),
-      saveSkillDraft,
-      removeAgentSkill,
-      assignSkill,
-      dismissSkillError: () => dispatch({ type: "dismissSkillError" }),
+      setAgentSetting,
       startReview,
       cancelReview,
       openReviewById,
@@ -577,11 +517,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       addProject,
       removeProject,
       fetchPullRequests,
-      reviewSkill,
-      fixCommentsSkill,
-      saveSkillDraft,
-      removeAgentSkill,
-      assignSkill,
+      reviewerAgent,
+      fixerAgent,
+      setAgentSetting,
       reviewingIds,
       reviewsFor,
       startReview,
