@@ -55,7 +55,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/main/**/*.ts", "src/preload/**/*.ts", "forge.config.ts", "vite.*.config.{ts,mts}"],
+    files: [
+      "src/main/**/*.ts",
+      "src/preload/**/*.ts",
+      "forge.config.ts",
+      "vite.*.config.{ts,mts}",
+      ".claude/hooks/**/*.mjs",
+    ],
     languageOptions: {
       globals: globals.node,
     },

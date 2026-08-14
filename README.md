@@ -40,11 +40,48 @@ This launches the app in development mode via Electron Forge.
 | Command                                   | Description                                 |
 | ----------------------------------------- | ------------------------------------------- |
 | `npm start`                               | Run the app in development mode             |
+| `npm run check`                           | Run every check CI runs, in one go          |
+| `npm test`                                | Run the test suite (Vitest)                 |
+| `npm run typecheck`                       | Type-check without emitting                 |
+| `npm run lint` / `npm run lint:fix`       | Lint the codebase                           |
+| `npm run format` / `npm run format:check` | Format the codebase with Prettier           |
 | `npm run package`                         | Package the app without building installers |
 | `npm run make`                            | Build platform installers                   |
 | `npm run publish`                         | Publish a build                             |
-| `npm run lint` / `npm run lint:fix`       | Lint the codebase                           |
-| `npm run format` / `npm run format:check` | Format the codebase with Prettier           |
+
+Every one of these has a matching `make` target (`make check`, `make test`, …); run `make help` for
+the list.
+
+## Contributing
+
+Checks run at three points, so a mistake is caught as early as possible:
+
+- **On save**, if you use an AI coding agent — the hooks in `.claude/` format the file it just wrote
+  and feed lint problems straight back to it.
+- **On commit** — husky + lint-staged format and fix the staged files, then run typecheck and tests.
+- **On every pull request** — [CI](.github/workflows/ci.yml) runs format, lint, typecheck and test
+  as separate jobs, so you see all the failures at once.
+
+`npm install` sets up the git hooks. Conventions and architecture notes for both humans and agents
+live in [AGENTS.md](AGENTS.md), with path-scoped rules in
+[`.github/instructions/`](.github/instructions/).
+
+### Working on this with an AI agent
+
+The repository is set up for Claude Code and opencode alike, reading the same `AGENTS.md`, the same
+scoped rules, and the same slash commands. Both get the same guardrails: destructive git and shell
+commands are denied outright, anything that pushes or publishes asks first, and edited files are
+formatted on the way past.
+
+The harness is almost entirely markdown and declarative config — the deny/ask rules are plain
+pattern lists, one per tool, rather than code. The single exception is a Stop hook that runs
+`make check` before Claude Code can call the work done, which is the one behaviour that cannot be
+expressed as data. See [the harness section of AGENTS.md](AGENTS.md#the-harness) for how the two
+sides map onto each other, and for the one trap: the two rule files use **opposite** match
+precedence.
+
+`.opencode/agents/` holds a `reviewer` and a `fixer` agent written against this codebase — the ones
+to point Workestrator's own **Reviewer** and **Fixed** board actions at when reviewing this repo.
 
 ## Tech stack
 
