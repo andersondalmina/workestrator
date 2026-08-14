@@ -1,7 +1,6 @@
 import { useWorkspace } from "../../store/WorkspaceProvider";
 import type { Theme } from "../../types";
-import { AgentSkillsSection } from "./AgentSkillsSection";
-import { BoardActionsSection } from "./BoardActionsSection";
+import { AgentSettingsSection } from "./AgentSettingsSection";
 import { SettingsSection } from "./SettingsSection";
 
 const THEME_OPTIONS: { id: Theme; label: string; swatch: string }[] = [
@@ -28,9 +27,7 @@ export function SettingsScreen() {
           </div>
         </div>
 
-        <AgentSkillsSection />
-
-        <BoardActionsSection />
+        <AgentSettingsSection />
 
         <SettingsSection title="Appearance">
           <div className="flex flex-col gap-4 px-4 py-[14px]">

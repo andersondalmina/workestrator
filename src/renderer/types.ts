@@ -87,6 +87,5 @@ export interface Project {
 export interface ComposerForm {
   title: string;
   branch: string;
-  skill: string;
   repo: string;
 }

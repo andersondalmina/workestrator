@@ -11,11 +11,10 @@ export const IpcChannel = {
   AddProject: "projects:add",
   DeleteProject: "projects:delete",
   FetchPullRequests: "pull-requests:fetch",
-  ListAgentSkills: "agent-skills:list",
-  SaveAgentSkill: "agent-skills:save",
-  DeleteAgentSkill: "agent-skills:delete",
-  GetSkillAssignments: "agent-skills:get-assignments",
-  AssignSkill: "agent-skills:assign",
+  ListOpencodeAgents: "agents:list",
+  GetAgentSettings: "agents:get-settings",
+  LoadAgentConfiguration: "agents:load",
+  SetAgentSetting: "agents:set",
   StartReview: "reviews:start",
   CancelReview: "reviews:cancel",
   ListReviews: "reviews:list",
@@ -38,37 +37,29 @@ export interface StoredProject {
 }
 
 /**
- * A skill the user wrote themselves, stored in the local database. It names an
- * agent instruction — a slash command, a prompt file, whatever the user runs —
- * and is what a board action dispatches once it is assigned to one.
+ * A primary OpenCode agent, as listed by `opencode agent list`.
  */
-export interface StoredAgentSkill {
-  id: number;
-  /** How the skill is listed, e.g. `review-guard`. Unique. */
+export interface OpencodeAgent {
   name: string;
-  /** What the skill is for, shown under its name. May be empty. */
-  description: string;
-  /** What the agent is asked to run, e.g. `/review-pr` or a prompt. */
-  command: string;
+  type: "primary";
 }
 
-/** A skill without its row id, as the settings form has it before saving. */
-export interface AgentSkillDraft {
-  /** Set when editing an existing skill, absent when creating one. */
-  id?: number;
-  name: string;
-  description: string;
-  command: string;
-}
-
-/** The board actions a skill can be put behind. */
-export type SkillAction = "review" | "fixComments";
+/** The board actions an OpenCode agent can be assigned to. */
+export type AgentAction = "reviewer" | "fixer";
 
 /**
- * Which skill each board action runs. `null` means the action has no skill
- * yet, either because none was picked or because the one picked was deleted.
+ * Which OpenCode agent each board action runs. `null` means no agent has been
+ * picked yet.
  */
-export type SkillAssignments = Record<SkillAction, number | null>;
+export type AgentSettings = Record<AgentAction, string | null>;
+
+/** OpenCode agents plus the board assignments read from the database. */
+export interface AgentConfiguration {
+  agents: OpencodeAgent[];
+  settings: AgentSettings;
+  /** Set when `opencode agent list` could not be read; settings still come from the database. */
+  agentsError: string | null;
+}
 
 /** A CI check as the platform reported it, reduced to what the board shows. */
 export interface RemoteCheck {
@@ -202,22 +193,17 @@ export interface WorkestratorApi {
    * or cannot reach its host comes back as a failure for that project.
    */
   fetchPullRequests(): Promise<PullRequestFetch>;
-  /** Every skill the user wrote, oldest first. */
-  listAgentSkills(): Promise<StoredAgentSkill[]>;
+  /** Every primary OpenCode agent the user has configured. */
+  listOpencodeAgents(): Promise<OpencodeAgent[]>;
+  /** Which OpenCode agent each board action currently runs. */
+  getAgentSettings(): Promise<AgentSettings>;
   /**
-   * Creates a skill, or updates the one the draft carries an id for. Rejects
-   * when the name is empty or already belongs to another skill.
+   * Lists OpenCode agents and reads saved assignments. Assignments that no
+   * longer name a known agent are cleared in the database.
    */
-  saveAgentSkill(draft: AgentSkillDraft): Promise<StoredAgentSkill>;
-  /**
-   * Forgets a skill. Any board action pointing at it is left unassigned, so
-   * a deleted skill can never be dispatched.
-   */
-  deleteAgentSkill(id: number): Promise<void>;
-  /** Which skill each board action currently runs. */
-  getSkillAssignments(): Promise<SkillAssignments>;
-  /** Puts a skill behind a board action, or clears it with `null`. */
-  assignSkill(action: SkillAction, skillId: number | null): Promise<void>;
+  loadAgentConfiguration(): Promise<AgentConfiguration>;
+  /** Puts an OpenCode agent behind a board action, or clears it with `null`. */
+  setAgentSetting(action: AgentAction, agentName: string | null): Promise<void>;
   /**
    * Checks the pull request out into a worktree of its own and turns the
    * review agent loose on it. Resolves as soon as the run has started, with

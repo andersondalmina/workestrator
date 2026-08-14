@@ -1,9 +1,8 @@
 import { BrowserWindow, ipcMain, shell } from "electron";
 import {
   IpcChannel,
-  type AgentSkillDraft,
+  type AgentAction,
   type ReviewRequest,
-  type SkillAction,
 } from "../shared/ipc";
 import { getReview, listReviewSummaries } from "./db";
 import {
@@ -15,14 +14,13 @@ import {
 import { fetchPullRequests } from "./services/pullRequestService";
 import { cancelReview, startReview } from "./services/reviewService";
 import {
-  assignSkill,
-  getAgentSkills,
-  getAssignments,
-  removeAgentSkill,
-  saveAgentSkill,
-} from "./services/skillService";
+  assignAgent,
+  getSettings,
+  listOpencodeAgents,
+  loadAgentConfiguration,
+} from "./services/agentSettingsService";
 
-const SKILL_ACTIONS = new Set<SkillAction>(["review", "fixComments"]);
+const AGENT_ACTIONS = new Set<AgentAction>(["reviewer", "fixer"]);
 
 const PLATFORMS = new Set(["github", "gitlab"]);
 
@@ -69,23 +67,20 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IpcChannel.FetchPullRequests, () => fetchPullRequests());
 
-  ipcMain.handle(IpcChannel.ListAgentSkills, () => getAgentSkills());
+  ipcMain.handle(IpcChannel.ListOpencodeAgents, () => listOpencodeAgents());
 
-  ipcMain.handle(IpcChannel.SaveAgentSkill, (_event, draft: unknown) =>
-    saveAgentSkill(toSkillDraft(draft)),
-  );
+  ipcMain.handle(IpcChannel.GetAgentSettings, () => getSettings());
 
-  ipcMain.handle(IpcChannel.DeleteAgentSkill, (_event, id: unknown) => {
-    removeAgentSkill(toRowId(id, "skill id"));
-  });
+  ipcMain.handle(IpcChannel.LoadAgentConfiguration, () => loadAgentConfiguration());
 
-  ipcMain.handle(IpcChannel.GetSkillAssignments, () => getAssignments());
-
-  ipcMain.handle(IpcChannel.AssignSkill, (_event, action: unknown, skillId: unknown) => {
-    if (typeof action !== "string" || !SKILL_ACTIONS.has(action as SkillAction)) {
+  ipcMain.handle(IpcChannel.SetAgentSetting, async (_event, action: unknown, agentName: unknown) => {
+    if (typeof action !== "string" || !AGENT_ACTIONS.has(action as AgentAction)) {
       throw new Error(`Not a board action: ${String(action)}`);
     }
-    assignSkill(action as SkillAction, skillId === null ? null : toRowId(skillId, "skill id"));
+    if (agentName !== null && typeof agentName !== "string") {
+      throw new Error(`Not an agent name: ${String(agentName)}`);
+    }
+    await assignAgent(action as AgentAction, agentName);
   });
 
   ipcMain.handle(IpcChannel.StartReview, (_event, request: unknown) =>
@@ -130,22 +125,6 @@ function toReviewRequest(value: unknown): ReviewRequest {
     pullRequestUrl,
     branch: toText(branch, "branch"),
     platform: platform as ReviewRequest["platform"],
-  };
-}
-
-/** Nothing crosses the bridge unread: the renderer is treated as untrusted. */
-function toSkillDraft(value: unknown): AgentSkillDraft {
-  if (typeof value !== "object" || value === null) {
-    throw new Error("Not a skill");
-  }
-
-  const { id, name, description, command } = value as Record<string, unknown>;
-
-  return {
-    id: id === undefined ? undefined : toRowId(id, "skill id"),
-    name: toText(name, "skill name"),
-    description: description === undefined ? "" : toText(description, "skill description"),
-    command: toText(command, "skill command"),
   };
 }
 

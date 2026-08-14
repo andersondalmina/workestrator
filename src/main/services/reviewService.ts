@@ -17,7 +17,7 @@ import {
   type ReviewStatus,
   type ReviewSummary,
 } from "../../shared/ipc";
-import { createReview, finishReview, getProject } from "../db";
+import { createReview, finishReview, getAgentSettings, getProject } from "../db";
 import { ensureWorktree } from "./gitService";
 import { CANCELLED, runReviewAgent } from "./reviewAgent";
 
@@ -54,6 +54,11 @@ export function startReview(request: ReviewRequest): ReviewSummary {
     throw new Error(`Re-add ${project.name} so its repository folder is known`);
   }
 
+  const reviewer = getAgentSettings().reviewer;
+  if (!reviewer) {
+    throw new Error("Pick a Reviewer agent in Settings");
+  }
+
   const review = createReview({
     projectId: request.projectId,
     pullRequestId: request.pullRequestId,
@@ -68,7 +73,7 @@ export function startReview(request: ReviewRequest): ReviewSummary {
 
   // Deliberately not awaited: checking the pull request out takes seconds and
   // the agent takes minutes. How it went arrives on `onReviewChanged`.
-  void runAgent(review, project.localPath, request, controller.signal).finally(() => {
+  void runAgent(review, project.localPath, request, reviewer, controller.signal).finally(() => {
     running.delete(request.pullRequestId);
   });
 
@@ -111,6 +116,7 @@ async function runAgent(
   review: ReviewSummary,
   root: string,
   request: ReviewRequest,
+  agentName: string,
   signal: AbortSignal,
 ): Promise<void> {
   try {
@@ -122,7 +128,12 @@ async function runAgent(
       platform: request.platform,
     });
 
-    const written = await runReviewAgent(review.worktreePath, request.pullRequestUrl, signal);
+    const written = await runReviewAgent(
+      review.worktreePath,
+      request.pullRequestUrl,
+      agentName,
+      signal,
+    );
     // Whatever the agent had written by the time it was stopped is still worth
     // keeping, but the run is not one that finished.
     save(review.id, signal.aborted ? "cancelled" : "completed", written);
