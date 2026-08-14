@@ -1,7 +1,12 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from "electron";
-import { IpcChannel, type ReviewSummary, type WorkestratorApi } from "../shared/ipc";
+import {
+  IpcChannel,
+  type ReviewEventPayload,
+  type ReviewSummary,
+  type WorkestratorApi,
+} from "../shared/ipc";
 
 const api: WorkestratorApi = {
   platform: process.platform,
@@ -19,7 +24,7 @@ const api: WorkestratorApi = {
   cancelReview: (id) => ipcRenderer.invoke(IpcChannel.CancelReview, id),
   listReviews: () => ipcRenderer.invoke(IpcChannel.ListReviews),
   getReview: (id) => ipcRenderer.invoke(IpcChannel.GetReview, id),
-  // The only channel the main process talks on unasked. The listener cannot be
+  // The two channels the main process talks on unasked. A listener cannot be
   // handed to `ipcRenderer` as it is — nothing from the renderer crosses the
   // bridge — so it is wrapped here, and unsubscribing is handed back.
   onReviewChanged: (listener) => {
@@ -27,6 +32,13 @@ const api: WorkestratorApi = {
     ipcRenderer.on(IpcChannel.ReviewChanged, handler);
     return () => {
       ipcRenderer.off(IpcChannel.ReviewChanged, handler);
+    };
+  },
+  onReviewEvent: (listener) => {
+    const handler = (_event: unknown, payload: ReviewEventPayload) => listener(payload);
+    ipcRenderer.on(IpcChannel.ReviewEvent, handler);
+    return () => {
+      ipcRenderer.off(IpcChannel.ReviewEvent, handler);
     };
   },
 };

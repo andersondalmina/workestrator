@@ -42,11 +42,11 @@ export function TaskReviews({ reviews }: { reviews: ReviewSummary[] }) {
             }`}
             style={{ background: TONE[STATUS_TONE[review.status]] }}
           />
-          <span className="flex-1 font-mono text-[11.5px] leading-none font-normal text-fg2">
+          <span className="flex-1 font-mono text-[13px] leading-none font-normal text-fg2">
             {relativeTime(review.startedAt)}
           </span>
           <span
-            className="font-sans text-[11px] leading-none font-medium"
+            className="font-sans text-[12.5px] leading-none font-medium"
             style={{ color: TONE[STATUS_TONE[review.status]] }}
           >
             {STATUS_LABEL[review.status]}

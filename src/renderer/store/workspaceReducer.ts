@@ -10,10 +10,26 @@ import type {
   StoredProject,
   StoredReview,
 } from "../../shared/ipc";
+import type { AgentEvent } from "../../shared/agentEvent";
 import type { BoardTask, ChipId, ColumnId, ComposerForm, Project, Screen, Theme } from "../types";
 
 /** Accents handed out to added projects, so each gets a distinct folder tint. */
 const PROJECT_ACCENTS = ["var(--green)", "var(--orange)", "var(--red)", "var(--blue)"];
+
+/**
+ * How much of one review's working is kept. A review that goes on long enough
+ * to pass this has a timeline nobody is scrolling all of, and the end of it is
+ * the part still worth having, so the oldest blocks fall off the top the way
+ * they would out of a terminal.
+ */
+const EVENT_LIMIT = 500;
+
+/**
+ * How many reviews are kept working for at once. Only the one in the panel is
+ * ever read, and a window left open all day runs plenty of them, so the buffers
+ * behind it are let go oldest first rather than held until the window reloads.
+ */
+const REVIEW_LIMIT = 5;
 
 /** Shapes a database row into the project the board works with. */
 export function toProject(stored: StoredProject): Project {
@@ -95,6 +111,13 @@ export interface WorkspaceState {
    * on them, since a fetch replaces every fetched card wholesale.
    */
   reviews: Record<string, ReviewSummary[]>;
+  /**
+   * What each review's agent has been seen doing, in the order it arrived,
+   * keyed by the id of the review it belongs to. Only ever filled by a run
+   * this window was open for: nothing writes these down, so a review from a
+   * previous launch has none and shows only what it ended up writing.
+   */
+  reviewEvents: Record<number, AgentEvent[]>;
   /** The review being read in the panel, or `null` while the list is shown. */
   openReview: StoredReview | null;
   /** Set between opening a review and its text being read back. */
@@ -127,6 +150,7 @@ export const initialState: WorkspaceState = {
   agentsError: null,
   agentSettingError: null,
   reviews: {},
+  reviewEvents: {},
   openReview: null,
   openReviewBusy: false,
   reviewError: null,
@@ -180,6 +204,7 @@ export type WorkspaceAction =
   | { type: "dismissAgentSettingError" }
   | { type: "reviewsLoaded"; reviews: ReviewSummary[] }
   | { type: "reviewChanged"; review: ReviewSummary }
+  | { type: "reviewEvent"; reviewId: number; event: AgentEvent }
   | { type: "reviewOpened" }
   | { type: "reviewLoaded"; review: StoredReview | null }
   | { type: "closeReview" }
@@ -459,6 +484,25 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
       };
     }
 
+    // One thing the agent did, filed under the review it was doing it for. An
+    // event that has been seen before takes the place of the one it repeats —
+    // opencode reports a tool call again when it revisits one — so the same
+    // call is never shown twice. Reviews are numbered as they are recorded, so
+    // nothing here has to be cleared: a new run cannot land on an old buffer.
+    case "reviewEvent": {
+      const known = state.reviewEvents[action.reviewId] ?? [];
+      const at = known.findIndex((entry) => entry.id === action.event.id);
+      const next =
+        at === -1
+          ? [...known, action.event]
+          : known.map((entry, index) => (index === at ? action.event : entry));
+
+      return {
+        ...state,
+        reviewEvents: forget({ ...state.reviewEvents, [action.reviewId]: trim(next) }),
+      };
+    }
+
     // The panel switches to the review before its text has been read, so the
     // list is not left up while the database answers.
     case "reviewOpened":
@@ -479,6 +523,35 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     default:
       return state;
   }
+}
+
+/**
+ * One review's working, cut back to what the timeline draws. Turn endings are
+ * kept whatever happens: they are never a block of their own, they are a
+ * handful of bytes each, and the token total is added up from them — dropping
+ * one would make a running total run backwards.
+ */
+function trim(events: AgentEvent[]): AgentEvent[] {
+  let excess = events.filter((event) => event.kind !== "step_finish").length - EVENT_LIMIT;
+  if (excess <= 0) return events;
+
+  return events.filter((event) => {
+    if (event.kind === "step_finish" || excess <= 0) return true;
+    excess -= 1;
+    return false;
+  });
+}
+
+/** The reviews still worth holding the working of, which is the newest few. */
+function forget(events: Record<number, AgentEvent[]>): Record<number, AgentEvent[]> {
+  const ids = Object.keys(events).map(Number);
+  if (ids.length <= REVIEW_LIMIT) return events;
+
+  // Reviews are numbered as they are recorded, so the smallest ids are oldest.
+  const kept: Record<number, AgentEvent[]> = {};
+  for (const id of ids.sort((a, b) => b - a).slice(0, REVIEW_LIMIT)) kept[id] = events[id];
+
+  return kept;
 }
 
 /** Reviews filed under the pull request they were run for, newest first. */

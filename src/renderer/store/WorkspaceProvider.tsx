@@ -22,11 +22,15 @@ import {
   workspaceReducer,
   type WorkspaceState,
 } from "./workspaceReducer";
+import type { AgentEvent } from "../../shared/agentEvent";
 import type { AgentAction, ReviewSummary } from "../../shared/ipc";
 import type { BoardTask, ChipId, ComposerForm, Project, Screen, Theme } from "../types";
 
 /** How long the board shows its skeleton when the scope changes. */
 const LOADING_MS = 460;
+
+/** Answered for a review with nothing recorded, so the empty case is one array. */
+const NO_EVENTS: AgentEvent[] = [];
 
 /** Unwraps the wrapper `ipcRenderer.invoke` puts around a main-process error. */
 function errorMessage(error: unknown): string {
@@ -61,6 +65,8 @@ export interface WorkspaceValue extends WorkspaceState {
   reviewingIds: Set<string>;
   /** Every review run against a pull request, newest first. */
   reviewsFor: (taskId: string) => ReviewSummary[];
+  /** What a review's agent has been seen doing, oldest first. */
+  eventsFor: (reviewId: number) => AgentEvent[];
 
   // Actions
   setQuery: (query: string) => void;
@@ -118,6 +124,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     addProjectBusy,
     agentSettings,
     reviews,
+    reviewEvents,
     openReview,
   } = state;
 
@@ -264,6 +271,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // Reviews outlive the window that asked for one — they run in the main
   // process — so the board reads what is already recorded and then follows
   // whatever happens next, rather than only knowing about its own runs.
+  //
+  // The agent's working comes over a second subscription, because it arrives
+  // by the hundred while a review is running and the board has no use for any
+  // of it: only the panel showing that review does.
   useEffect(() => {
     const api = window.workestrator;
     if (!api) return;
@@ -281,15 +292,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const unsubscribe = api.onReviewChanged((review) =>
       dispatch({ type: "reviewChanged", review }),
     );
+    const unsubscribeEvents = api.onReviewEvent(({ reviewId, event }) =>
+      dispatch({ type: "reviewEvent", reviewId, event }),
+    );
 
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeEvents();
     };
   }, []);
 
   // The main process owns the run: it answers with the review it recorded,
   // and says how that review ended over the subscription above.
+  //
+  // The panel opens on that review as soon as there is one, since watching the
+  // agent work is the reason to have started it — the alternative is a button
+  // that says "Reviewing…" over a list the run has to be found in again.
   const startReview = useCallback((task: BoardTask) => {
     const projectId = storedProjectId(task.scope ?? "");
     if (projectId === null || !task.pr || !task.url || !task.platform) {
@@ -318,7 +337,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         branch: task.branch,
         platform: task.platform,
       })
-      .then((review) => dispatch({ type: "reviewChanged", review }))
+      .then((review) => {
+        dispatch({ type: "reviewChanged", review });
+        // Nothing is read back for it: a review that has only just started has
+        // written nothing down yet, and what it does from here arrives on the
+        // event subscription.
+        dispatch({ type: "reviewLoaded", review: { ...review, result: "" } });
+      })
       .catch((error: unknown) => dispatch({ type: "reviewFailed", message: errorMessage(error) }));
   }, []);
 
@@ -346,6 +371,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // it ends, what the agent wrote is read again so the panel fills in where it
   // stands, rather than leaving an empty page that has to be reopened. Each
   // review is only ever chased once, so an empty one cannot loop.
+  //
+  // The review already on screen is left up while the database answers, rather
+  // than going through `reviewOpened`: it is a review being filled in, not one
+  // being opened, and blanking it would throw away the timeline of the run the
+  // user is in the middle of reading.
   useEffect(() => {
     if (!openReview || openReview.status === "running" || openReview.result) {
       return;
@@ -353,10 +383,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (chasedReview.current === openReview.id) return;
 
     chasedReview.current = openReview.id;
-    openReviewById(openReview.id);
-  }, [openReview, openReviewById]);
+    let cancelled = false;
+    window.workestrator
+      ?.getReview(openReview.id)
+      .then((review) => {
+        // Whatever the panel moved on to in the meantime is what it is showing.
+        if (!cancelled && review) dispatch({ type: "reviewLoaded", review });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) dispatch({ type: "reviewFailed", message: errorMessage(error) });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openReview]);
 
   const reviewsFor = useCallback((taskId: string) => reviews[taskId] ?? [], [reviews]);
+
+  const eventsFor = useCallback(
+    (reviewId: number) => reviewEvents[reviewId] ?? NO_EVENTS,
+    [reviewEvents],
+  );
 
   const reviewingIds = useMemo(
     () =>
@@ -496,6 +544,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       fixerAgent,
       reviewingIds,
       reviewsFor,
+      eventsFor,
 
       setQuery: (next) => dispatch({ type: "setQuery", query: next }),
       clearQuery: () => dispatch({ type: "setQuery", query: "" }),
@@ -548,6 +597,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setAgentSetting,
       reviewingIds,
       reviewsFor,
+      eventsFor,
       startReview,
       cancelReview,
       openReviewById,

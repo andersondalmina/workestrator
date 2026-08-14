@@ -13,10 +13,12 @@ import path from "node:path";
 import { app, BrowserWindow } from "electron";
 import {
   IpcChannel,
+  type ReviewEventPayload,
   type ReviewRequest,
   type ReviewStatus,
   type ReviewSummary,
 } from "../../shared/ipc";
+import type { AgentEvent } from "../../shared/agentEvent";
 import { createReview, finishReview, getAgentSettings, getProject } from "../db";
 import { ensureWorktree } from "./gitService";
 import { CANCELLED, runReviewAgent } from "./reviewAgent";
@@ -133,6 +135,7 @@ async function runAgent(
       request.pullRequestUrl,
       agentName,
       signal,
+      (event) => broadcastEvent(review.id, event),
     );
     // Whatever the agent had written by the time it was stopped is still worth
     // keeping, but the run is not one that finished.
@@ -156,5 +159,17 @@ function errorMessage(error: unknown): string {
 function broadcast(review: ReviewSummary): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send(IpcChannel.ReviewChanged, review);
+  }
+}
+
+/**
+ * The agent working, sent on as it happens. Nothing is written down: a window
+ * that was not open to hear it has the review itself to read instead, which is
+ * the part worth keeping.
+ */
+function broadcastEvent(reviewId: number, event: AgentEvent): void {
+  const payload: ReviewEventPayload = { reviewId, event };
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send(IpcChannel.ReviewEvent, payload);
   }
 }
