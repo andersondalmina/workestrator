@@ -52,6 +52,19 @@ This launches the app in development mode via Electron Forge.
 Every one of these has a matching `make` target (`make check`, `make test`, …); run `make help` for
 the list.
 
+## Releasing
+
+Releases are cut by pushing a tag. Bump `version` in `package.json` through a pull request, then:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+[The release workflow](.github/workflows/release.yml) checks the tag against `package.json`, runs the
+full check suite, builds on macOS (arm64 and x64), Windows and Linux, and publishes the installers as
+a GitHub release. Tags containing a hyphen (`v0.2.0-beta.1`) go out as prereleases. The builds are
+not code-signed yet, so the release notes include the Gatekeeper and SmartScreen workarounds.
+
 ## Contributing
 
 Checks run at three points, so a mistake is caught as early as possible:

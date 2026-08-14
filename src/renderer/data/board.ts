@@ -1,3 +1,7 @@
+// Named import so the bundler tree-shakes to just the version string rather
+// than inlining all of package.json.
+import { version } from "../../../package.json";
+
 import type { Column, Tone } from "../types";
 
 export const COLUMNS: Column[] = [
@@ -42,4 +46,5 @@ export const FILTER_CHIPS = [
   { id: "failing", label: "Failing checks" },
 ] as const;
 
-export const APP_VERSION = "1.0.0";
+// Read from package.json so the badge never drifts from the shipped version.
+export const APP_VERSION = version;

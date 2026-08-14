@@ -1,0 +1,139 @@
+name: Release
+
+# A release is a tag push. Bump `version` in package.json through a pull request,
+# then tag the merge commit `v<version>` and push the tag.
+on:
+  push:
+    tags: ["v*"]
+
+# Tag pushes do not supersede each other the way branch pushes do, so there is no
+# concurrency group here: cancelling a half-finished release is worse than two runs.
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Same npm pin as ci.yml: the lockfile is npm 11-written and npm 10 rejects it.
+      - run: npm install -g npm@11
+
+      - run: node -v && npm -v
+
+      # The tag is what users download; package.json is what ends up baked into the
+      # artifact names and the installers. Refuse to ship if they disagree.
+      - name: Check tag matches package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $pkg" >&2
+            exit 1
+          fi
+
+      - run: npm ci
+
+      # CI splits these across a matrix to report every failure on a pull request at
+      # once. By tag time they have all passed already; one leg is enough.
+      - run: npm run check
+
+  build:
+    name: build (${{ matrix.os }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            # macos-latest is arm64 and Forge only builds the host arch, so Intel Macs
+            # get nothing unless both are named.
+            make: npm run make -- --arch=x64,arm64
+          - os: windows-latest
+            make: npm run make
+          - os: ubuntu-latest
+            make: npm run make
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm install -g npm@11
+
+      - run: node -v && npm -v
+
+      - run: npm ci
+
+      - run: ${{ matrix.make }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          # upload-artifact v4 needs a unique name per job.
+          name: dist-${{ matrix.os }}
+          path: out/make/**
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # Forge nests its output per maker, platform and arch. Flatten it so the release
+      # assets are a flat list of installers. Squirrel's `RELEASES` file is left out on
+      # purpose: it has a generic name and only matters for auto-update, which we do
+      # not ship.
+      - name: Collect distributables
+        run: |
+          mkdir -p dist
+          find artifacts -type f \
+            \( -name '*.zip' -o -name '*.exe' -o -name '*.nupkg' -o -name '*.deb' -o -name '*.rpm' \) \
+            -exec cp {} dist/ \;
+          ls -l dist
+
+      - name: Write release notes
+        run: |
+          cat > notes.md <<'EOF'
+          These builds are **not code-signed**. Your operating system will warn you the
+          first time you open the app:
+
+          - **macOS** — right-click the app and choose *Open*, or run
+            `xattr -dr com.apple.quarantine /Applications/workestrator.app`.
+          - **Windows** — on the SmartScreen prompt, choose *More info* → *Run anyway*.
+          EOF
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A tag like v0.2.0-beta.1 is a prerelease and must not be marked latest.
+          prerelease=""
+          case "$GITHUB_REF_NAME" in
+            *-*) prerelease="--prerelease" ;;
+          esac
+          # --notes-file content is prepended to the generated commit list.
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes-file notes.md \
+            $prerelease

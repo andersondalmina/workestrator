@@ -1,8 +1,8 @@
 {
   "name": "workestrator",
   "productName": "workestrator",
-  "version": "1.0.0",
-  "description": "My Electron application description",
+  "version": "0.1.0",
+  "description": "Turn your open pull requests into a board and dispatch an AI agent to review them.",
   "main": ".vite/build/main.js",
   "private": true,
   "scripts": {

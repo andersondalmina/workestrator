@@ -33,6 +33,24 @@ Every check below is also a `make` target. Prefer `make check` before handing wo
 
 Node 22+ is required (`node:sqlite`). Install with `npm ci`.
 
+## Releasing
+
+A release is a tag push, and the tag is the source of truth. Nothing bumps the version for you.
+
+1. Bump `version` in `package.json` on a branch and open a pull request — the same guardrail applies
+   here as everywhere else, so the bump lands on `main` through review.
+2. Tag the merge commit and push the tag:
+
+   ```bash
+   git tag v0.2.0 && git push origin v0.2.0
+   ```
+
+[`release.yml`](.github/workflows/release.yml) then refuses the run if the tag and `package.json`
+disagree, re-runs `make check`, builds on macOS, Windows and Linux, and attaches the installers to a
+GitHub release. A tag with a hyphen in it (`v0.2.0-beta.1`) is published as a prerelease.
+
+Builds are unsigned; the release notes tell users how to get past Gatekeeper and SmartScreen.
+
 ## Architecture
 
 Three processes, and the boundary between them is the thing to respect:
