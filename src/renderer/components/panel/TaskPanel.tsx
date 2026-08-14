@@ -7,7 +7,7 @@ import type { BoardTask, Check, TimelineEvent } from "../../types";
 import { CloseIcon } from "../icons";
 
 const SECTION_LABEL =
-  "font-sans text-[10.5px] leading-none font-medium tracking-[0.07em] text-fg4 uppercase";
+  "font-sans text-[11.5px] leading-none font-medium tracking-[0.07em] text-fg4 uppercase";
 
 /** Falls back to a summary line when a task carries no recorded history. */
 function timelineFor(task: BoardTask): TimelineEvent[] {
@@ -79,7 +79,7 @@ export function TaskPanel({ task }: { task: BoardTask }) {
       />
 
       <aside
-        className="relative flex h-full w-[452px] animate-wk-in flex-col border-l border-line bg-panel shadow-drawer"
+        className="relative flex h-full w-[620px] max-w-[92vw] animate-wk-in flex-col border-l border-line bg-panel shadow-drawer"
         role="dialog"
         aria-modal="true"
         aria-label={task.title}
@@ -89,14 +89,14 @@ export function TaskPanel({ task }: { task: BoardTask }) {
             <div className="min-w-0 flex-1">
               <div className="mb-2 flex items-center gap-2">
                 <span className="size-2 rounded-[3px]" style={{ background: column?.color }} />
-                <span className="font-sans text-[11px] leading-none font-medium text-fg3">
+                <span className="font-sans text-[12.5px] leading-none font-medium text-fg3">
                   {column?.name}
                 </span>
-                <span className="font-mono text-[11px] leading-none font-normal text-fg4">
+                <span className="font-mono text-[12.5px] leading-none font-normal text-fg4">
                   {task.pr ? `#${task.pr}` : "no PR yet"}
                 </span>
               </div>
-              <div className="font-sans text-base leading-[1.35] font-semibold tracking-[-0.012em] text-pretty">
+              <div className="font-sans text-[17px] leading-[1.35] font-semibold tracking-[-0.012em] text-pretty">
                 {task.title}
               </div>
             </div>
@@ -111,113 +111,115 @@ export function TaskPanel({ task }: { task: BoardTask }) {
           </div>
         </header>
 
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-[18px] pt-4 pb-5">
-          {/* A review takes the body over rather than opening beside it: it is
-              the longest thing the panel ever shows, and this one is 452px. */}
-          {openReview || openReviewBusy ? (
+        {/* A review takes the body over rather than opening beside it: it is
+            by far the longest thing the panel ever shows, and the panel is a
+            drawer. It brings its own scrolling with it, because a feed that
+            follows the agent down has to know what it is scrolling. */}
+        {openReview || openReviewBusy ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-3 px-[18px] pt-4 pb-5">
             <ReviewResult review={openReview} />
-          ) : (
-            <>
-              <dl className="m-0 grid grid-cols-[84px_1fr] items-baseline gap-x-[14px] gap-y-[9px]">
-                {meta.map((row) => (
-                  <Fragment key={row.k}>
-                    <dt className="font-sans text-[11px] leading-[1.5] font-normal text-fg4">
-                      {row.k}
-                    </dt>
-                    <dd className="m-0 overflow-hidden text-ellipsis font-mono text-[11.5px] leading-[1.5] font-normal text-fg2">
-                      {row.v}
-                    </dd>
-                  </Fragment>
-                ))}
-              </dl>
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-[18px] pt-4 pb-5">
+            <dl className="m-0 grid grid-cols-[84px_1fr] items-baseline gap-x-[14px] gap-y-[9px]">
+              {meta.map((row) => (
+                <Fragment key={row.k}>
+                  <dt className="font-sans text-[12.5px] leading-[1.5] font-normal text-fg4">
+                    {row.k}
+                  </dt>
+                  <dd className="m-0 overflow-hidden text-ellipsis font-mono text-[13px] leading-[1.5] font-normal text-fg2">
+                    {row.v}
+                  </dd>
+                </Fragment>
+              ))}
+            </dl>
 
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <span className={SECTION_LABEL}>PR activity</span>
+                <span className="rounded border border-lines px-[5px] py-[3px] font-mono text-[11px] leading-none font-normal text-fg4">
+                  synced from {platformName(task).toLowerCase()}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                {timelineFor(task).map((event, index) => (
+                  <div key={index} className="flex gap-3">
+                    <div className="flex w-[9px] flex-none flex-col items-center">
+                      <span
+                        className="mt-1 size-[9px] flex-none rounded-full"
+                        style={{ background: TONE[event.tone ?? "fg"] }}
+                      />
+                      <span className="w-px flex-1 bg-lines" />
+                    </div>
+                    <div className="flex-1 pb-[14px]">
+                      <div className="font-sans text-[14px] leading-[1.4] font-medium text-fg">
+                        {event.text}
+                      </div>
+                      <div className="mt-[3px] font-mono text-[12.5px] leading-[1.4] font-normal text-fg4">
+                        {event.by}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {checks.length > 0 && (
               <section>
-                <div className="mb-3 flex items-center gap-2">
-                  <span className={SECTION_LABEL}>PR activity</span>
-                  <span className="rounded border border-lines px-[5px] py-[3px] font-mono text-[10px] leading-none font-normal text-fg4">
-                    synced from {platformName(task).toLowerCase()}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  {timelineFor(task).map((event, index) => (
-                    <div key={index} className="flex gap-3">
-                      <div className="flex w-[9px] flex-none flex-col items-center">
-                        <span
-                          className="mt-1 size-[9px] flex-none rounded-full"
-                          style={{ background: TONE[event.tone ?? "fg"] }}
-                        />
-                        <span className="w-px flex-1 bg-lines" />
-                      </div>
-                      <div className="flex-1 pb-[14px]">
-                        <div className="font-sans text-[12.5px] leading-[1.4] font-medium text-fg">
-                          {event.text}
-                        </div>
-                        <div className="mt-[3px] font-mono text-[11px] leading-[1.4] font-normal text-fg4">
-                          {event.by}
-                        </div>
-                      </div>
+                <div className={`mb-[10px] block ${SECTION_LABEL}`}>Checks</div>
+                <div className="overflow-hidden rounded-[10px] border border-lines">
+                  {checks.map((check) => (
+                    <div
+                      key={check.name}
+                      className="flex items-center gap-[10px] border-b border-lines bg-card px-3 py-[10px] last:border-b-0"
+                    >
+                      <span
+                        className="size-[7px] flex-none rounded-full"
+                        style={{ background: TONE[check.tone] }}
+                      />
+                      <span className="flex-1 font-mono text-[13px] leading-none font-normal text-fg2">
+                        {check.name}
+                      </span>
+                      <span
+                        className="font-sans text-[12.5px] leading-none font-medium"
+                        style={{ color: TONE[check.tone] }}
+                      >
+                        {check.state}
+                      </span>
+                      <span className="font-mono text-[11.5px] leading-none font-normal text-fg4">
+                        {check.time}
+                      </span>
                     </div>
                   ))}
                 </div>
               </section>
+            )}
 
-              {checks.length > 0 && (
-                <section>
-                  <div className={`mb-[10px] block ${SECTION_LABEL}`}>Checks</div>
-                  <div className="overflow-hidden rounded-[10px] border border-lines">
-                    {checks.map((check) => (
-                      <div
-                        key={check.name}
-                        className="flex items-center gap-[10px] border-b border-lines bg-card px-3 py-[10px] last:border-b-0"
-                      >
-                        <span
-                          className="size-[7px] flex-none rounded-full"
-                          style={{ background: TONE[check.tone] }}
-                        />
-                        <span className="flex-1 font-mono text-[11.5px] leading-none font-normal text-fg2">
-                          {check.name}
-                        </span>
-                        <span
-                          className="font-sans text-[11px] leading-none font-medium"
-                          style={{ color: TONE[check.tone] }}
-                        >
-                          {check.state}
-                        </span>
-                        <span className="font-mono text-[10.5px] leading-none font-normal text-fg4">
-                          {check.time}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* The review button lives in the footer; this section only
+            {/* The review button lives in the footer; this section only
                   shows what it produced. */}
-              {(isReviewable(task) || reviews.length > 0) && (
-                <section>
-                  <div className="mb-[10px] flex items-center gap-2">
-                    <span className={SECTION_LABEL}>Reviews</span>
+            {(isReviewable(task) || reviews.length > 0) && (
+              <section>
+                <div className="mb-[10px] flex items-center gap-2">
+                  <span className={SECTION_LABEL}>Reviews</span>
+                </div>
+                {reviews.length > 0 ? (
+                  <TaskReviews reviews={reviews} />
+                ) : (
+                  <div className="font-mono text-[13px] leading-[1.5] font-normal text-fg4">
+                    Nothing has read this pull request yet.
                   </div>
-                  {reviews.length > 0 ? (
-                    <TaskReviews reviews={reviews} />
-                  ) : (
-                    <div className="font-mono text-[11.5px] leading-[1.5] font-normal text-fg4">
-                      Nothing has read this pull request yet.
-                    </div>
-                  )}
-                </section>
-              )}
-            </>
-          )}
-        </div>
+                )}
+              </section>
+            )}
+          </div>
+        )}
 
         <footer className="flex flex-none items-center gap-2 border-t border-lines px-[18px] py-3">
           {/* The panel's primary action is always the review: a task the app
               made up itself has no pull request to hand an agent. */}
           <button
             type="button"
-            className={`rounded-lg bg-btn px-[14px] py-[9px] font-sans text-[12.5px] leading-none font-semibold text-btnfg ${
+            className={`rounded-lg bg-btn px-[14px] py-[9px] font-sans text-[14px] leading-none font-semibold text-btnfg ${
               reviewing || !isReviewable(task)
                 ? "cursor-default opacity-50"
                 : "hover:opacity-[0.88]"
@@ -234,13 +236,13 @@ export function TaskPanel({ task }: { task: BoardTask }) {
           </button>
           <button
             type="button"
-            className="rounded-lg border border-lines px-[13px] py-[9px] font-sans text-[12.5px] leading-none font-medium text-fg2 hover:border-line hover:text-fg"
+            className="rounded-lg border border-lines px-[13px] py-[9px] font-sans text-[14px] leading-none font-medium text-fg2 hover:border-line hover:text-fg"
             onClick={() => window.workestrator?.openExternal(remoteUrl(task))}
           >
             Open on {platformName(task)}
           </button>
           <div className="flex-1" />
-          <span className="font-mono text-[10.5px] leading-none font-normal text-fg4">
+          <span className="font-mono text-[11.5px] leading-none font-normal text-fg4">
             esc to close
           </span>
         </footer>

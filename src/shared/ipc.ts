@@ -3,6 +3,7 @@
  * Keeping it in one place means a channel can never drift between the two sides.
  */
 
+import type { AgentEvent } from "./agentEvent";
 import type { RepositoryPlatform } from "./repoUrl";
 
 export const IpcChannel = {
@@ -21,6 +22,8 @@ export const IpcChannel = {
   GetReview: "reviews:get",
   /** Pushed by the main process: a review started, finished or failed. */
   ReviewChanged: "reviews:changed",
+  /** Pushed by the main process: a running review's agent did something. */
+  ReviewEvent: "reviews:event",
 } as const;
 
 /**
@@ -171,6 +174,16 @@ export interface StoredReview extends ReviewSummary {
   result: string;
 }
 
+/**
+ * Something the agent did, and the review it was doing it for. Only running
+ * reviews send these, and they are sent once as they happen: nothing keeps
+ * them, so a window that opens later sees the review but not the working.
+ */
+export interface ReviewEventPayload {
+  reviewId: number;
+  event: AgentEvent;
+}
+
 /** Shape exposed on `window.workestrator` by the preload script. */
 export interface WorkestratorApi {
   /** `process.platform` of the host, used for platform specific chrome. */
@@ -228,4 +241,10 @@ export interface WorkestratorApi {
    * that stops listening.
    */
   onReviewChanged(listener: (review: ReviewSummary) => void): () => void;
+  /**
+   * Called for each thing a running review's agent does — a thought, a tool
+   * call, a message it finished writing. Returns the function that stops
+   * listening.
+   */
+  onReviewEvent(listener: (payload: ReviewEventPayload) => void): () => void;
 }
