@@ -1,0 +1,5 @@
+# Fastest feedback loop in the harness: fix what is fixable on the staged files,
+# then run the two whole-repo checks that are cheap enough to sit here.
+npx lint-staged
+npm run typecheck
+npm test

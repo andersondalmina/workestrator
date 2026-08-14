@@ -3,7 +3,12 @@
  * which one each board action runs.
  */
 
-import type { AgentAction, AgentConfiguration, AgentSettings, OpencodeAgent } from "../../shared/ipc";
+import type {
+  AgentAction,
+  AgentConfiguration,
+  AgentSettings,
+  OpencodeAgent,
+} from "../../shared/ipc";
 import { getAgentSettings, setAgentSetting } from "../db";
 import { listOpencodeAgents } from "./opencodeAgentService";
 

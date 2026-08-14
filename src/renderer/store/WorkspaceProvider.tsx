@@ -253,12 +253,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const setAgentSetting = useCallback((action: AgentAction, agentName: string | null) => {
-    const previous = agentSettings[action];
-    dispatch({ type: "agentAssigned", action, agentName });
-    window.workestrator
-      ?.setAgentSetting(action, agentName)
-      .catch((error: unknown) =>
+  const setAgentSetting = useCallback(
+    (action: AgentAction, agentName: string | null) => {
+      const previous = agentSettings[action];
+      dispatch({ type: "agentAssigned", action, agentName });
+      window.workestrator?.setAgentSetting(action, agentName).catch((error: unknown) =>
         dispatch({
           type: "agentSettingFailed",
           action,
@@ -266,7 +265,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           message: errorMessage(error),
         }),
       );
-  }, [agentSettings]);
+    },
+    [agentSettings],
+  );
 
   // Reviews outlive the window that asked for one — they run in the main
   // process — so the board reads what is already recorded and then follows
