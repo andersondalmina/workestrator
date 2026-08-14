@@ -34,9 +34,19 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # node:sqlite, which the app stores its data with, needs Node 22+.
-          node-version: 22
+          # One Node version for CI and for humans. node:sqlite, which the app
+          # stores its data with, needs 22+; .nvmrc pins which 22+ it is.
+          node-version-file: .nvmrc
           cache: npm
+
+      # npm 10 and npm 11 resolve optional peer dependencies differently, and
+      # this tree has one: vitest brings its own vite, whose optional `esbuild`
+      # peer is not satisfied by the copy vite 5 hoists. A lockfile written by
+      # one major is rejected by the other, so pin the major rather than
+      # inherit whatever the Node release happened to bundle.
+      - run: npm install -g npm@11
+
+      - run: node -v && npm -v
 
       - run: npm ci
 
