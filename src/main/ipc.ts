@@ -1,9 +1,5 @@
 import { BrowserWindow, ipcMain, shell } from "electron";
-import {
-  IpcChannel,
-  type AgentAction,
-  type ReviewRequest,
-} from "../shared/ipc";
+import { IpcChannel, type AgentAction, type ReviewRequest } from "../shared/ipc";
 import { getReview, listReviewSummaries } from "./db";
 import {
   addProjectFromDirectory,
@@ -73,15 +69,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IpcChannel.LoadAgentConfiguration, () => loadAgentConfiguration());
 
-  ipcMain.handle(IpcChannel.SetAgentSetting, async (_event, action: unknown, agentName: unknown) => {
-    if (typeof action !== "string" || !AGENT_ACTIONS.has(action as AgentAction)) {
-      throw new Error(`Not a board action: ${String(action)}`);
-    }
-    if (agentName !== null && typeof agentName !== "string") {
-      throw new Error(`Not an agent name: ${String(agentName)}`);
-    }
-    await assignAgent(action as AgentAction, agentName);
-  });
+  ipcMain.handle(
+    IpcChannel.SetAgentSetting,
+    async (_event, action: unknown, agentName: unknown) => {
+      if (typeof action !== "string" || !AGENT_ACTIONS.has(action as AgentAction)) {
+        throw new Error(`Not a board action: ${String(action)}`);
+      }
+      if (agentName !== null && typeof agentName !== "string") {
+        throw new Error(`Not an agent name: ${String(agentName)}`);
+      }
+      await assignAgent(action as AgentAction, agentName);
+    },
+  );
 
   ipcMain.handle(IpcChannel.StartReview, (_event, request: unknown) =>
     startReview(toReviewRequest(request)),

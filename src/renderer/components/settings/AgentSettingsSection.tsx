@@ -35,9 +35,7 @@ export function AgentSettingsSection() {
       title="Agent settings"
       description="Pick the OpenCode agent each board action runs."
     >
-      {agentsLoading && (
-        <div className={`${ROW} ${ROW_DESC}`}>Loading agents…</div>
-      )}
+      {agentsLoading && <div className={`${ROW} ${ROW_DESC}`}>Loading agents…</div>}
 
       {agentsError && (
         <div className={`${ROW} font-sans text-[11.5px] leading-[1.5] font-medium text-red`}>
@@ -70,7 +68,9 @@ export function AgentSettingsSection() {
           return (
             <div key={action.id} className={ROW}>
               <div className="min-w-0 flex-1">
-                <div className="font-sans text-[12.5px] leading-[1.3] font-medium">{action.label}</div>
+                <div className="font-sans text-[12.5px] leading-[1.3] font-medium">
+                  {action.label}
+                </div>
                 <div className={`mt-[3px] ${ROW_DESC}`}>{action.desc}</div>
               </div>
 
@@ -86,9 +86,7 @@ export function AgentSettingsSection() {
                 <option value="">
                   {opencodeAgents.length === 0 ? "No agents found" : "No agent"}
                 </option>
-                {missing && selected && (
-                  <option value={selected}>{selected} (not found)</option>
-                )}
+                {missing && selected && <option value={selected}>{selected} (not found)</option>}
                 {opencodeAgents.map((agent) => (
                   <option key={agent.name} value={agent.name}>
                     {agent.name}
