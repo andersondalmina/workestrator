@@ -16,6 +16,8 @@ export const IpcChannel = {
   GetAgentSettings: "agents:get-settings",
   LoadAgentConfiguration: "agents:load",
   SetAgentSetting: "agents:set",
+  ListWorktreeApps: "worktree:list-apps",
+  OpenWorktree: "worktree:open",
   StartReview: "reviews:start",
   CancelReview: "reviews:cancel",
   ListReviews: "reviews:list",
@@ -175,6 +177,18 @@ export interface StoredReview extends ReviewSummary {
 }
 
 /**
+ * An app a checked out pull request can be opened in. Only the ones this
+ * machine actually has are ever listed, so the menu never offers an editor
+ * that is not installed.
+ */
+export interface WorktreeApp {
+  /** Stable id the app is asked for back by, e.g. `finder`. */
+  id: string;
+  /** What the menu calls it, e.g. "Visual Studio Code". */
+  name: string;
+}
+
+/**
  * Something the agent did, and the review it was doing it for. Only running
  * reviews send these, and they are sent once as they happen: nothing keeps
  * them, so a window that opens later sees the review but not the working.
@@ -217,6 +231,16 @@ export interface WorkestratorApi {
   loadAgentConfiguration(): Promise<AgentConfiguration>;
   /** Puts an OpenCode agent behind a board action, or clears it with `null`. */
   setAgentSetting(action: AgentAction, agentName: string | null): Promise<void>;
+  /**
+   * The apps this machine can open a checked out pull request in, in the order
+   * they are offered — the first is the one the panel's button itself runs.
+   */
+  listWorktreeApps(): Promise<WorktreeApp[]>;
+  /**
+   * Opens the worktree a review was run in, in one of the listed apps. Rejects
+   * when the review, its checkout or the app is not there any more.
+   */
+  openWorktree(reviewId: number, appId: string): Promise<void>;
   /**
    * Checks the pull request out into a worktree of its own and turns the
    * review agent loose on it. Resolves as soon as the run has started, with

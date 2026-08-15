@@ -20,6 +20,8 @@ const api: WorkestratorApi = {
   loadAgentConfiguration: () => ipcRenderer.invoke(IpcChannel.LoadAgentConfiguration),
   setAgentSetting: (action, agentName) =>
     ipcRenderer.invoke(IpcChannel.SetAgentSetting, action, agentName),
+  listWorktreeApps: () => ipcRenderer.invoke(IpcChannel.ListWorktreeApps),
+  openWorktree: (reviewId, appId) => ipcRenderer.invoke(IpcChannel.OpenWorktree, reviewId, appId),
   startReview: (request) => ipcRenderer.invoke(IpcChannel.StartReview, request),
   cancelReview: (id) => ipcRenderer.invoke(IpcChannel.CancelReview, id),
   listReviews: () => ipcRenderer.invoke(IpcChannel.ListReviews),

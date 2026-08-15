@@ -87,6 +87,15 @@ export function FolderIcon(props: IconProps) {
   );
 }
 
+/** The caret on a control that has a menu behind it. */
+export function ChevronIcon(props: IconProps) {
+  return (
+    <Svg strokeWidth={1.6} {...props}>
+      <path d="M4.5 6.5 8 10l3.5-3.5" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function TrashIcon(props: IconProps) {
   return (
     <Svg {...props}>

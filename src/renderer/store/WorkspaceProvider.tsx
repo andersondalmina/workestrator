@@ -101,6 +101,8 @@ export interface WorkspaceValue extends WorkspaceState {
   cancelReview: (id: number) => void;
   /** Reads a stored review, which the panel then shows instead of the list. */
   openReviewById: (id: number) => void;
+  /** Opens the worktree a review was run in, in one of `worktreeApps`. */
+  openWorktree: (reviewId: number, appId: string) => void;
   closeReview: () => void;
   dismissReviewError: () => void;
 }
@@ -357,6 +359,33 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       .catch((error: unknown) => dispatch({ type: "reviewFailed", message: errorMessage(error) }));
   }, []);
 
+  // Which apps a checkout can be opened in is a fact about the machine, so it
+  // is read once. Outside the Electron shell nothing is listed and the panel
+  // shows no button at all.
+  useEffect(() => {
+    let cancelled = false;
+    window.workestrator
+      ?.listWorktreeApps()
+      .then((apps) => {
+        if (!cancelled) dispatch({ type: "worktreeAppsLoaded", apps });
+      })
+      .catch((error: unknown) => {
+        console.error("Could not list the apps a worktree opens in", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Nothing is dispatched on success: the app opens in front of the window,
+  // which is the whole of what there is to report.
+  const openWorktree = useCallback((reviewId: number, appId: string) => {
+    window.workestrator
+      ?.openWorktree(reviewId, appId)
+      .catch((error: unknown) => dispatch({ type: "reviewFailed", message: errorMessage(error) }));
+  }, []);
+
   const openReviewById = useCallback((id: number) => {
     dispatch({ type: "reviewOpened" });
     window.workestrator
@@ -572,6 +601,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       startReview,
       cancelReview,
       openReviewById,
+      openWorktree,
       closeReview: () => dispatch({ type: "closeReview" }),
       dismissReviewError: () => dispatch({ type: "dismissReviewError" }),
     }),
@@ -602,6 +632,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       startReview,
       cancelReview,
       openReviewById,
+      openWorktree,
     ],
   );
 
