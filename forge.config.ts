@@ -10,6 +10,25 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Packager writes the app's real name, icon and `ElectronAsarIntegrity` hash into
+    // Info.plist *after* unpacking Electron, which invalidates the ad-hoc signature
+    // Electron ships with. Apple Silicon refuses to launch a bundle whose signature
+    // does not verify, so an unsigned release is not merely "unidentified developer",
+    // it is unlaunchable. Re-sign ad-hoc (`-`) as the last packaging step to seal the
+    // bundle as it is actually shipped. `identityValidation` is off because `-` is not
+    // a certificate to look up in a keychain. This is not a Developer ID signature:
+    // Gatekeeper still warns on first open, which the release notes explain.
+    // Only meaningful for darwin builds; packager ignores it on other platforms.
+    osxSign: {
+      identity: "-",
+      identityValidation: false,
+      // The hardened runtime turns on library validation, which demands that every
+      // loaded library carry the same Team ID as the host process. Ad-hoc signatures
+      // have no Team ID at all, so the app dies in dyld loading Electron Framework.
+      // The hardened runtime only buys us notarization eligibility, and we do not
+      // notarize, so turn it off rather than paper over it with entitlements.
+      optionsForFile: () => ({ hardenedRuntime: false }),
+    },
   },
   rebuildConfig: {},
   makers: [new MakerSquirrel({}), new MakerZIP({}, ["darwin"]), new MakerRpm({}), new MakerDeb({})],
