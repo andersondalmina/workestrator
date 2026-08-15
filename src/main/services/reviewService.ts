@@ -9,8 +9,9 @@
  * the agent is done.
  */
 
+import fs from "node:fs/promises";
 import path from "node:path";
-import { app, BrowserWindow } from "electron";
+import { BrowserWindow } from "electron";
 import {
   IpcChannel,
   type ReviewEventPayload,
@@ -19,8 +20,15 @@ import {
   type ReviewSummary,
 } from "../../shared/ipc";
 import type { AgentEvent } from "../../shared/agentEvent";
-import { createReview, finishReview, getAgentSettings, getProject } from "../db";
-import { ensureWorktree } from "./gitService";
+import {
+  createReview,
+  finishReview,
+  getAgentSettings,
+  getProject,
+  listProjects,
+  setReviewWorktreePath,
+} from "../db";
+import { createWorktree, removeWorktree, worktreeHome } from "./gitService";
 import { CANCELLED, runReviewAgent } from "./reviewAgent";
 
 /** A run under way, and the handle that stops it. */
@@ -61,13 +69,20 @@ export function startReview(request: ReviewRequest): ReviewSummary {
     throw new Error("Pick a Reviewer agent in Settings");
   }
 
-  const review = createReview({
+  const started = createReview({
     projectId: request.projectId,
     pullRequestId: request.pullRequestId,
     pullRequestNumber: request.pullRequestNumber,
     branch: request.branch,
-    worktreePath: worktreePathFor(request),
   });
+
+  // The checkout is named after the review, so where it goes is only settled
+  // once the review has an id.
+  const review: ReviewSummary = {
+    ...started,
+    worktreePath: worktreePathFor(started, project.localPath),
+  };
+  setReviewWorktreePath(review.id, review.worktreePath);
 
   const controller = new AbortController();
   running.set(request.pullRequestId, { review, controller });
@@ -96,12 +111,27 @@ export function cancelReview(id: number): void {
   }
 }
 
-/** Each pull request keeps its own checkout, outside the user's repository. */
-function worktreePathFor(request: ReviewRequest): string {
+/**
+ * Clears the checkouts left over from before, which is what takes away the ones
+ * a crash left behind: nothing is running yet, so nothing here is in use.
+ */
+export async function pruneAllWorktrees(): Promise<void> {
+  for (const project of listProjects()) {
+    if (project.localPath) await pruneWorktrees(project.localPath);
+  }
+}
+
+/** What the folders of a project's checkouts are named after. */
+const WORKTREE_PREFIX = "pr-";
+
+/**
+ * Each review keeps its own checkout, in the repository it belongs to and named
+ * so no two reviews share one.
+ */
+function worktreePathFor(review: ReviewSummary, root: string): string {
   return path.join(
-    app.getPath("userData"),
-    "worktrees",
-    `${request.projectId}-pr-${request.pullRequestNumber}`,
+    worktreeHome(root),
+    `${WORKTREE_PREFIX}${review.pullRequestNumber}-r${review.id}`,
   );
 }
 
@@ -122,11 +152,12 @@ async function runAgent(
   signal: AbortSignal,
 ): Promise<void> {
   try {
-    await ensureWorktree({
+    await createWorktree({
       root,
       worktreePath: review.worktreePath,
       branch: request.branch,
       number: request.pullRequestNumber,
+      reviewId: review.id,
       platform: request.platform,
     });
 
@@ -143,6 +174,54 @@ async function runAgent(
   } catch (error) {
     if (signal.aborted) save(review.id, "cancelled", CANCELLED);
     else save(review.id, "failed", errorMessage(error));
+  } finally {
+    await pruneWorktrees(root);
+  }
+}
+
+/**
+ * How many of a project's checkouts are kept. A review's worktree is left
+ * behind so the code it read can be opened and looked at, and each one is a
+ * whole checkout of the repository, so only the last few are worth the disk.
+ */
+const KEEP_WORKTREES = 3;
+
+/**
+ * Takes away all but the newest few of a project's checkouts. Runs after every
+ * review and once at startup, which is what clears the ones a crash left.
+ *
+ * Never throws. This is housekeeping, and a review that was written is not
+ * failed over a folder that would not go.
+ */
+async function pruneWorktrees(root: string): Promise<void> {
+  try {
+    const home = worktreeHome(root);
+    const entries = await fs.readdir(home, { withFileTypes: true });
+
+    const dated = await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith(WORKTREE_PREFIX))
+        .map(async (entry) => {
+          const directory = path.join(home, entry.name);
+          const stats = await fs.stat(directory).catch(() => null);
+          return { directory, at: stats?.mtimeMs ?? 0 };
+        }),
+    );
+
+    // A review still under way is reading its worktree, and it is not always
+    // the newest one — a long review outlives the short ones started after it.
+    const held = new Set([...running.values()].map((run) => run.review.worktreePath));
+
+    const stale = dated
+      .filter((entry) => !held.has(entry.directory))
+      .sort((left, right) => right.at - left.at)
+      .slice(KEEP_WORKTREES);
+
+    for (const entry of stale) {
+      await removeWorktree(root, entry.directory);
+    }
+  } catch {
+    // Nothing has been checked out for this project yet, most likely.
   }
 }
 

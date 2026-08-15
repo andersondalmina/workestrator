@@ -5,7 +5,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { searchPath } from "./cliPath";
+import { commandEnvironment } from "./cliPath";
 import type { AgentEvent } from "../../shared/agentEvent";
 
 /**
@@ -31,9 +31,39 @@ const TOOL_TEXT_LIMIT = 2_000;
 export const CANCELLED = "This review was cancelled";
 
 /**
- * Runs `opencode run --agent <name> --format json --thinking <url>` in `cwd`
- * and answers with the review it wrote. Rejects with a message meant for the
- * user when there is no review to answer with.
+ * The command that reads a pull request in `cwd`, as arguments and environment.
+ *
+ * `opencode` takes the folder it works in from `--dir` and from `PWD`, not from
+ * the working directory it was actually started in. Spawning it with `cwd`
+ * alone leaves `PWD` as the app inherited it — wherever Workestrator itself was
+ * launched — and the review is then written about that folder instead of the
+ * pull request. Both are set here, and the other CLIs the agent reaches for get
+ * the right answer from `PWD` too.
+ *
+ * `commandEnvironment` takes out what would answer the same question for `git`,
+ * which the agent runs constantly to read the pull request.
+ */
+export function agentCommand(
+  cwd: string,
+  url: string,
+  agentName: string,
+): { args: string[]; env: NodeJS.ProcessEnv } {
+  const env: NodeJS.ProcessEnv = { ...commandEnvironment(), PWD: cwd };
+  // Left over from the shell or the package manager that started the app, and
+  // both name the folder `PWD` no longer does.
+  delete env.OLDPWD;
+  delete env.INIT_CWD;
+
+  return {
+    args: ["run", "--agent", agentName, "--dir", cwd, "--format", "json", "--thinking", url],
+    env,
+  };
+}
+
+/**
+ * Runs the review agent over the checkout in `cwd` and answers with the review
+ * it wrote. Rejects with a message meant for the user when there is no review
+ * to answer with.
  *
  * `--format json` prints one event per line — `text` for a finished message,
  * `error` for a session that gave up, and tool calls and reasoning in between
@@ -62,20 +92,17 @@ export function runReviewAgent(
       return;
     }
 
-    const child = spawn(
-      "opencode",
-      ["run", "--agent", agentName, "--format", "json", "--thinking", url],
-      {
-        cwd,
-        windowsHide: true,
-        env: { ...process.env, PATH: searchPath() },
-        // The agent is handed everything it needs on the command line. Left as
-        // a pipe, stdin never reaches end of file, and `opencode run` — which
-        // takes a piped message when it is not talking to a terminal — waits on
-        // it for good instead of starting.
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
+    const { args, env } = agentCommand(cwd, url, agentName);
+    const child = spawn("opencode", args, {
+      cwd,
+      windowsHide: true,
+      env,
+      // The agent is handed everything it needs on the command line. Left as a
+      // pipe, stdin never reaches end of file, and `opencode run` — which takes
+      // a piped message when it is not talking to a terminal — waits on it for
+      // good instead of starting.
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
     let written = "";
     let reported = "";

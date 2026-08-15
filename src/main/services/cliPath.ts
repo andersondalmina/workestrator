@@ -22,3 +22,32 @@ export function searchPath(): string {
   const extra = CLI_DIRECTORIES.filter((directory) => !inherited.includes(directory));
   return [...inherited, ...extra].join(path.delimiter);
 }
+
+/**
+ * What git reads instead of looking around the folder it was run in. Git sets
+ * these for the commands it runs itself — a hook, a rebase, an editor — and any
+ * of them in the app's own environment sends every `git` call it makes to that
+ * repository rather than the one it was pointed at, whatever `cwd` says.
+ */
+const GIT_LOCATION_VARIABLES = [
+  "GIT_DIR",
+  "GIT_COMMON_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE",
+  "GIT_PREFIX",
+  "GIT_CEILING_DIRECTORIES",
+];
+
+/**
+ * The environment a CLI this app spawns should see: the user's, with the CLIs
+ * findable and nothing left in it that would answer "which repository?" on the
+ * folder's behalf.
+ */
+export function commandEnvironment(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: searchPath() };
+  for (const name of GIT_LOCATION_VARIABLES) delete env[name];
+  return env;
+}

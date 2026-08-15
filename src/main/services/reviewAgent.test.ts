@@ -1,5 +1,46 @@
-import { describe, expect, it } from "vitest";
-import { parseAgentEvent } from "./reviewAgent";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { agentCommand, parseAgentEvent } from "./reviewAgent";
+
+describe("agentCommand", () => {
+  const worktree = "/tmp/worktrees/1-pr-2-r3";
+  const url = "https://github.com/owner/repo/pull/2";
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("names the checkout on the command line", () => {
+    const { args } = agentCommand(worktree, url, "code-reviewer");
+
+    expect(args).toEqual([
+      "run",
+      "--agent",
+      "code-reviewer",
+      "--dir",
+      worktree,
+      "--format",
+      "json",
+      "--thinking",
+      url,
+    ]);
+  });
+
+  // opencode reads `PWD` rather than the folder it was started in, and the one
+  // the app inherited names wherever Workestrator itself was launched. Left
+  // alone, the review is written about that folder instead of the pull request.
+  it("points PWD at the checkout, and drops what still names the old one", () => {
+    vi.stubEnv("PWD", "/Users/someone/Develop/workestrator");
+    vi.stubEnv("OLDPWD", "/Users/someone/Develop/workestrator");
+    vi.stubEnv("INIT_CWD", "/Users/someone/Develop/workestrator");
+
+    const { env } = agentCommand(worktree, url, "code-reviewer");
+
+    expect(env.PWD).toBe(worktree);
+    expect(env.OLDPWD).toBeUndefined();
+    expect(env.INIT_CWD).toBeUndefined();
+    expect(env.PATH).toBeTruthy();
+  });
+});
 
 /** Lines as `opencode run --format json --thinking` actually prints them. */
 const line = (event: unknown) => JSON.stringify(event);

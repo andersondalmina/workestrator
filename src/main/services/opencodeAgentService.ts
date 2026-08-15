@@ -5,6 +5,7 @@
  */
 
 import { execFile } from "node:child_process";
+import os from "node:os";
 import { promisify } from "node:util";
 import type { OpencodeAgent } from "../../shared/ipc";
 import { searchPath } from "./cliPath";
@@ -37,14 +38,25 @@ export function parseAgentList(stdout: string): OpencodeAgent[] {
   return agents;
 }
 
-/** Every primary OpenCode agent the user has configured. */
+/**
+ * Every primary OpenCode agent the user has configured globally.
+ *
+ * Read from a folder that is nobody's project on purpose. Run anywhere else,
+ * `opencode` adds the agents that repository defines to the list — and the one
+ * agent picked here is run against every project's checkout, where an agent
+ * belonging to some other repository is not there to be found. Both the folder
+ * and `PWD` are set, because that is where `opencode` looks.
+ */
 export async function listOpencodeAgents(): Promise<OpencodeAgent[]> {
+  const neutral = os.tmpdir();
+
   try {
     const { stdout } = await run("opencode", ["agent", "list"], {
+      cwd: neutral,
       timeout: TIMEOUT_MS,
       maxBuffer: MAX_OUTPUT_BYTES,
       windowsHide: true,
-      env: { ...process.env, PATH: searchPath() },
+      env: { ...process.env, PATH: searchPath(), PWD: neutral },
     });
     return parseAgentList(stdout);
   } catch (error) {

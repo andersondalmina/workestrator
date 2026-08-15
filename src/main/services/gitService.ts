@@ -8,6 +8,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { commandEnvironment } from "./cliPath";
 import type { RepositoryPlatform } from "../../shared/repoUrl";
 
 const run = promisify(execFile);
@@ -42,6 +43,7 @@ async function git(
       cwd: directory,
       timeout: timeoutMs,
       windowsHide: true,
+      env: commandEnvironment(),
     });
     return stdout.trim();
   } catch (error) {
@@ -120,61 +122,101 @@ export async function readRepository(directory: string): Promise<GitRepository> 
 /** Fetching a pull request's head reaches the network, so it gets far longer. */
 const FETCH_TIMEOUT_MS = 120_000;
 
-/** The branch a pull request is checked out under when its own name is taken. */
-function fallbackBranch(number: number): string {
-  return `workestrator/pr-${number}`;
+/** What names a branch this app made, as opposed to one the repository had. */
+const BRANCH_PREFIX = "workestrator/";
+
+/** The folder a repository's review checkouts live in, inside the repository. */
+export const WORKTREE_DIRECTORY = ".workestrator";
+
+/** Where a repository keeps its review checkouts. */
+export function worktreeHome(root: string): string {
+  return path.join(root, WORKTREE_DIRECTORY);
+}
+
+/**
+ * Keeps the checkouts out of the repository's eyes.
+ *
+ * They sit inside the working tree, so without this every review leaves
+ * `?? .workestrator/` in the user's `git status` and a whole second copy of the
+ * source for anything that walks the tree. The rule goes in `info/exclude`
+ * rather than `.gitignore`: `.gitignore` is the user's file and is committed,
+ * and this is not a decision to make on their behalf in a pull request.
+ *
+ * Written to the common git directory, which is where a repository that is
+ * itself a worktree keeps the one `info/exclude` all of them read.
+ */
+async function excludeWorktrees(root: string): Promise<void> {
+  const common = await git(["rev-parse", "--path-format=absolute", "--git-common-dir"], root);
+  if (!common) return;
+
+  const rule = `/${WORKTREE_DIRECTORY}/`;
+  const exclude = path.join(common, "info", "exclude");
+  const current = await fs.readFile(exclude, "utf8").catch(() => "");
+  if (current.split("\n").some((line) => line.trim() === rule)) return;
+
+  const separator = current === "" || current.endsWith("\n") ? "" : "\n";
+  await fs
+    .mkdir(path.dirname(exclude), { recursive: true })
+    .then(() => fs.appendFile(exclude, `${separator}# Workestrator's review checkouts\n${rule}\n`))
+    .catch(() => {
+      // A repository this app cannot write to still reviews fine; the user is
+      // left with the folder showing up as untracked, which is not worth
+      // refusing the review over.
+    });
+}
+
+/**
+ * The branch a pull request is checked out under when its own name is taken.
+ * Named after the review rather than the pull request: every review gets a
+ * worktree of its own, and the review before this one is still holding the
+ * branch it checked out under.
+ */
+export function fallbackBranch(number: number, reviewId: number): string {
+  return `${BRANCH_PREFIX}pr-${number}-r${reviewId}`;
 }
 
 export interface WorktreeRequest {
   /** Working tree root of the repository the worktree is added to. */
   root: string;
-  /** Where the checkout goes. Created if it is not there, reused if it is. */
+  /** Where the checkout goes. Anything already there is replaced. */
   worktreePath: string;
   /** The branch the pull request's changes are on. */
   branch: string;
   /** The pull request's number, used to reach a head on a fork. */
   number: number;
+  /** The review this checkout belongs to, which is what keeps it to itself. */
+  reviewId: number;
   platform: RepositoryPlatform;
 }
 
 /**
  * Puts a pull request's head in a worktree of its own, so it can be read
- * without touching whatever the user has checked out. An existing worktree is
- * reset onto the head rather than replaced, which is what makes reviewing the
- * same pull request twice cheap.
+ * without touching whatever the user has checked out. Every review gets a new
+ * one: a worktree the last review left behind has that review's changes and
+ * whatever its agent wrote in it, and neither is what this review is reading.
  */
-export async function ensureWorktree(request: WorktreeRequest): Promise<void> {
+export async function createWorktree(request: WorktreeRequest): Promise<void> {
+  // Before anything is written inside the repository, so the first review a
+  // project ever runs does not show up in the user's `git status`.
+  await excludeWorktrees(request.root);
+
   // A worktree whose folder was deleted by hand is still registered, and git
   // refuses to add another in its place until the record is dropped.
   await git(["worktree", "prune"], request.root);
 
   const head = await fetchHead(request);
-  const existing = await worktreeState(request.worktreePath);
 
-  if (existing === "usable") {
-    const reset = await git(["reset", "--hard", head], request.worktreePath);
-    if (reset === null) {
-      throw new Error("Could not update the worktree the review reads from");
-    }
-    // The last review may have left files behind; the next one reads the pull
-    // request, not what an agent did to it.
-    await git(["clean", "-fd"], request.worktreePath);
-    return;
-  }
-
-  // A folder that is no longer a worktree git answers for — the repository was
-  // re-cloned under it, say — would only make `worktree add` refuse to use the
-  // path. It is one this app made, inside its own data directory, so it goes.
-  if (existing === "stale") {
-    await fs.rm(request.worktreePath, { recursive: true, force: true });
-  }
-
+  // The path carries the review's id, so there is normally nothing here. What
+  // there could be is a folder from a review that was interrupted before git
+  // finished with it, and that would only make `worktree add` refuse the path.
+  await fs.rm(request.worktreePath, { recursive: true, force: true });
   await fs.mkdir(path.dirname(request.worktreePath), { recursive: true });
 
   // The pull request's own branch name first. Git refuses a branch that is
-  // already checked out somewhere else — most often in the user's own clone —
-  // and that is the one case worth checking out under another name.
-  for (const branch of [request.branch, fallbackBranch(request.number)]) {
+  // already checked out somewhere else — the user's own clone, or the worktree
+  // an earlier review is still using — and that is the case worth checking out
+  // under another name.
+  for (const branch of [request.branch, fallbackBranch(request.number, request.reviewId)]) {
     const added = await git(
       ["worktree", "add", "-B", branch, request.worktreePath, head],
       request.root,
@@ -183,6 +225,35 @@ export async function ensureWorktree(request: WorktreeRequest): Promise<void> {
   }
 
   throw new Error(`Could not check out ${request.branch} to review it`);
+}
+
+/**
+ * Takes a worktree away. Never throws: this runs to keep old checkouts from
+ * piling up, and a folder that would not go is not worth failing a review over.
+ *
+ * A branch this app made for the checkout goes with it, since nothing else will
+ * ever look at it. A branch the pull request named is left alone — that one is
+ * the user's.
+ */
+export async function removeWorktree(root: string, worktreePath: string): Promise<void> {
+  // Asked for the branch first, since after this the folder that knows it is
+  // gone. Read only when the folder is there: git run in a folder that is not
+  // fails the same way git being missing does, and that is not what happened.
+  const present = await fs.stat(worktreePath).then(
+    (stats) => stats.isDirectory(),
+    () => false,
+  );
+  const branch = present ? await git(["rev-parse", "--abbrev-ref", "HEAD"], worktreePath) : null;
+
+  await git(["worktree", "remove", "--force", worktreePath], root);
+  // `worktree remove` refuses a folder git no longer answers for, which is the
+  // one this is most needed for.
+  await fs.rm(worktreePath, { recursive: true, force: true }).catch(() => {});
+  await git(["worktree", "prune"], root);
+
+  if (branch?.startsWith(BRANCH_PREFIX)) {
+    await git(["branch", "-D", branch], root);
+  }
 }
 
 /**
@@ -211,16 +282,4 @@ async function fetchHead(request: WorktreeRequest): Promise<string> {
   throw new Error(
     `Could not fetch ${request.branch} — check that origin has it and that you can reach it`,
   );
-}
-
-/**
- * What is at the worktree path already: nothing, a working tree git still
- * answers for, or a folder left over from one it does not.
- */
-async function worktreeState(directory: string): Promise<"missing" | "usable" | "stale"> {
-  const stats = await fs.stat(directory).catch(() => null);
-  if (!stats?.isDirectory()) return "missing";
-
-  const inside = await git(["rev-parse", "--is-inside-work-tree"], directory);
-  return inside === "true" ? "usable" : "stale";
 }
