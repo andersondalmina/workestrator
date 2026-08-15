@@ -9,6 +9,7 @@ import type {
   ReviewSummary,
   StoredProject,
   StoredReview,
+  WorktreeApp,
 } from "../../shared/ipc";
 import type { AgentEvent } from "../../shared/agentEvent";
 import type { BoardTask, ChipId, ColumnId, ComposerForm, Project, Screen, Theme } from "../types";
@@ -122,7 +123,16 @@ export interface WorkspaceState {
   openReview: StoredReview | null;
   /** Set between opening a review and its text being read back. */
   openReviewBusy: boolean;
-  /** Why a review could not be started, e.g. the project moved on disk. */
+  /**
+   * The apps a checked out pull request can be opened in, in the order the
+   * panel offers them. Empty outside the Electron shell, where there is no
+   * machine to open anything on.
+   */
+  worktreeApps: WorktreeApp[];
+  /**
+   * Why a review could not be started or its checkout could not be opened,
+   * e.g. the project moved on disk.
+   */
   reviewError: string | null;
 }
 
@@ -153,6 +163,7 @@ export const initialState: WorkspaceState = {
   reviewEvents: {},
   openReview: null,
   openReviewBusy: false,
+  worktreeApps: [],
   reviewError: null,
 };
 
@@ -208,6 +219,7 @@ export type WorkspaceAction =
   | { type: "reviewOpened" }
   | { type: "reviewLoaded"; review: StoredReview | null }
   | { type: "closeReview" }
+  | { type: "worktreeAppsLoaded"; apps: WorktreeApp[] }
   | { type: "reviewFailed"; message: string }
   | { type: "dismissReviewError" };
 
@@ -513,6 +525,9 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
 
     case "closeReview":
       return { ...state, openReview: null, openReviewBusy: false };
+
+    case "worktreeAppsLoaded":
+      return { ...state, worktreeApps: action.apps };
 
     case "reviewFailed":
       return { ...state, reviewError: action.message };

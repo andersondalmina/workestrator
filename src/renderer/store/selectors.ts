@@ -51,6 +51,16 @@ export function groupIntoColumns(tasks: BoardTask[]): ColumnWithTasks[] {
   });
 }
 
+/**
+ * Whether there is a pull request behind a task. An agent is sent at a pull
+ * request, not at an idea of one: it is given the URL to read and the branch to
+ * check out, so a task the app made up itself has nothing to review — and, in
+ * turn, nothing that would ever be checked out to open.
+ */
+export function isReviewable(task: BoardTask): boolean {
+  return Boolean(task.pr && task.url && task.platform);
+}
+
 /** The column a task lands in when its panel action is confirmed. */
 export function nextColumnId(current: ColumnId): ColumnId {
   const index = COLUMNS.findIndex((column) => column.id === current);

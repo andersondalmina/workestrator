@@ -1,7 +1,9 @@
 import { Fragment } from "react";
+import { OpenWorktreeButton } from "./OpenWorktreeButton";
 import { ReviewResult } from "./ReviewResult";
 import { TaskReviews } from "./TaskReviews";
 import { COLUMNS, TONE } from "../../data/board";
+import { isReviewable } from "../../store/selectors";
 import { useWorkspace } from "../../store/WorkspaceProvider";
 import type { BoardTask, Check, TimelineEvent } from "../../types";
 import { CloseIcon } from "../icons";
@@ -41,15 +43,6 @@ function remoteUrl(task: BoardTask): string {
 /** The platform a task's links and history belong to. */
 function platformName(task: BoardTask): string {
   return task.platform === "gitlab" ? "GitLab" : "GitHub";
-}
-
-/**
- * An agent is sent at a pull request, not at an idea of one: it is given the
- * URL to read and the branch to check out, so a task the app made up itself
- * has nothing to review yet.
- */
-function isReviewable(task: BoardTask): boolean {
-  return Boolean(task.pr && task.url && task.platform);
 }
 
 export function TaskPanel({ task }: { task: BoardTask }) {
@@ -100,6 +93,7 @@ export function TaskPanel({ task }: { task: BoardTask }) {
                 {task.title}
               </div>
             </div>
+            <OpenWorktreeButton task={task} />
             <button
               type="button"
               className="flex size-7 flex-none items-center justify-center rounded-[7px] border border-lines hover:bg-panel2"

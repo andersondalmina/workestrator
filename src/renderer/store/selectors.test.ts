@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyMoves,
   groupIntoColumns,
+  isReviewable,
   matchesFilters,
   nextColumnId,
   primaryActionLabel,
@@ -150,5 +151,25 @@ describe("primaryActionLabel", () => {
     ["review", "Approve"],
   ])("labels the %s column's action", (column, label) => {
     expect(primaryActionLabel(column as ColumnId)).toBe(label);
+  });
+});
+
+describe("isReviewable", () => {
+  const pullRequest = task({
+    pr: 12,
+    url: "https://github.com/acme/api/pull/12",
+    platform: "github",
+  });
+
+  it("takes a task with a pull request behind it", () => {
+    expect(isReviewable(pullRequest)).toBe(true);
+  });
+
+  it.each<[string, Partial<BoardTask>]>([
+    ["number", { pr: null }],
+    ["url", { url: undefined }],
+    ["platform", { platform: undefined }],
+  ])("refuses a task with no %s", (_what, missing) => {
+    expect(isReviewable({ ...pullRequest, ...missing })).toBe(false);
   });
 });

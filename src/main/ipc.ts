@@ -9,6 +9,7 @@ import {
 } from "./services/projectService";
 import { fetchPullRequests } from "./services/pullRequestService";
 import { cancelReview, startReview } from "./services/reviewService";
+import { listWorktreeApps, openWorktree } from "./services/worktreeAppService";
 import {
   assignAgent,
   getSettings,
@@ -80,6 +81,14 @@ export function registerIpcHandlers(): void {
       }
       await assignAgent(action as AgentAction, agentName);
     },
+  );
+
+  ipcMain.handle(IpcChannel.ListWorktreeApps, () => listWorktreeApps());
+
+  // The checkout is named by the review that made it, so no path crosses the
+  // bridge: the only folders that can be opened are ones the app checked out.
+  ipcMain.handle(IpcChannel.OpenWorktree, (_event, reviewId: unknown, appId: unknown) =>
+    openWorktree(toRowId(reviewId, "review id"), toText(appId, "app id")),
   );
 
   ipcMain.handle(IpcChannel.StartReview, (_event, request: unknown) =>

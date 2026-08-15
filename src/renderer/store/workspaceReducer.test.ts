@@ -591,6 +591,20 @@ describe("what a running agent is seen doing", () => {
   });
 });
 
+describe("the apps a checkout opens in", () => {
+  it("keeps them in the order the main process offered them", () => {
+    const apps = [
+      { id: "finder", name: "Finder" },
+      { id: "vscode", name: "Visual Studio Code" },
+    ];
+    expect(reduce({}, { type: "worktreeAppsLoaded", apps }).worktreeApps).toEqual(apps);
+  });
+
+  it("has none before the machine has been asked", () => {
+    expect(initialState.worktreeApps).toEqual([]);
+  });
+});
+
 describe("errors the board reports", () => {
   it.each([
     ["dismissAddProjectError", "addProjectError"],
