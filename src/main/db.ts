@@ -254,7 +254,6 @@ export interface NewReview {
   pullRequestId: string;
   pullRequestNumber: number;
   branch: string;
-  worktreePath: string;
 }
 
 /**
@@ -268,15 +267,14 @@ export function createReview(review: NewReview): ReviewSummary {
   const { lastInsertRowid } = openDatabase()
     .prepare(
       `INSERT INTO pull_request_reviews
-         (project_id, pull_request_id, pull_request_number, branch, status, worktree_path, started_at)
-       VALUES (?, ?, ?, ?, 'running', ?, ?)`,
+         (project_id, pull_request_id, pull_request_number, branch, status, started_at)
+       VALUES (?, ?, ?, ?, 'running', ?)`,
     )
     .run(
       review.projectId,
       review.pullRequestId,
       review.pullRequestNumber,
       review.branch,
-      review.worktreePath,
       startedAt,
     );
 
@@ -284,9 +282,18 @@ export function createReview(review: NewReview): ReviewSummary {
     ...review,
     id: Number(lastInsertRowid),
     status: "running",
+    // Named after the review, so it can only be settled once the row has an id.
+    worktreePath: "",
     startedAt,
     finishedAt: null,
   };
+}
+
+/** Where a review's checkout went, which is known a moment after it starts. */
+export function setReviewWorktreePath(id: number, worktreePath: string): void {
+  openDatabase()
+    .prepare("UPDATE pull_request_reviews SET worktree_path = ? WHERE id = ?")
+    .run(worktreePath, id);
 }
 
 /** Writes down how a review ended: what the agent said, or what stopped it. */

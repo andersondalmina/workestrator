@@ -61,7 +61,8 @@ Three processes, and the boundary between them is the thing to respect:
   - `ipc.ts` — registers one handler per `IpcChannel`. Handlers stay thin; logic lives in services.
   - `db.ts` — all SQL. Rows use `snake_case` columns and are mapped to `camelCase` domain types at
     this boundary; nothing outside `db.ts` sees a raw row.
-  - `services/` — the real work: `gitService` (worktrees), `pullRequestService` (`gh`/`glab`),
+  - `services/` — the real work: `gitService` (worktrees, kept in each project's `.workestrator/`
+    and excluded through its `.git/info/exclude`), `pullRequestService` (`gh`/`glab`),
     `reviewAgent` + `reviewService` (running opencode and streaming its events),
     `agentSettingsService`, `opencodeAgentService`, `cliPath`.
 - **`src/preload/preload.ts`** — the context bridge. Exposes exactly the `WorkestratorApi` object
@@ -85,6 +86,11 @@ Three processes, and the boundary between them is the thing to respect:
   `_`.
 - **Never invoke a CLI by string concatenation.** Spawn with an argument array so branch names,
   paths and PR titles cannot become shell syntax.
+- **`opencode` takes its folder from `--dir` and `PWD`, not from the folder it was started in.**
+  Node's `spawn` sets the child's working directory but leaves `PWD` as the app inherited it — which
+  names wherever Workestrator itself was launched. Spawning `opencode` with `cwd` alone silently
+  runs the agent against this repository instead of the pull request. Build the command with
+  `agentCommand` in `reviewAgent.ts`, which sets both.
 - **Formatting is Prettier's job** (100 cols, double quotes, semicolons, trailing commas). Do not
   hand-format; run `make format`.
 - Comments explain _why_, not _what_. Match the density and voice of the file you're editing.

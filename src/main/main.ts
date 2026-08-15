@@ -3,6 +3,7 @@ import started from "electron-squirrel-startup";
 import { createMainWindow } from "./window";
 import { closeDatabase, failInterruptedReviews, openDatabase } from "./db";
 import { registerIpcHandlers } from "./ipc";
+import { pruneAllWorktrees } from "./services/reviewService";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -18,6 +19,9 @@ app.on("ready", () => {
   failInterruptedReviews();
   registerIpcHandlers();
   createMainWindow();
+  // Deliberately not awaited: old checkouts are in nobody's way, and removing
+  // them reaches the disk and git for every project on the board.
+  void pruneAllWorktrees();
 });
 
 app.on("will-quit", closeDatabase);

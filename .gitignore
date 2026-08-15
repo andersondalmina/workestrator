@@ -93,3 +93,7 @@ out/
 
 # Claude Code local overrides (personal, not shared)
 .claude/settings.local.json
+
+# Review checkouts. The app writes the same rule into each project's
+# .git/info/exclude at runtime; this covers reviewing Workestrator itself.
+.workestrator/

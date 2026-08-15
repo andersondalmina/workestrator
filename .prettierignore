@@ -1,0 +1,8 @@
+# Build output
+.vite/
+out/
+
+# Review checkouts. Workestrator puts a worktree per review under here when it
+# reviews its own pull requests, and formatting a second copy of the source is
+# neither wanted nor Prettier's business.
+.workestrator/
