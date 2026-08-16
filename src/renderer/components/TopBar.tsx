@@ -11,7 +11,7 @@ export function TopBar() {
     <header
       // The window has no native title bar, so this strip drags it — and on
       // macOS the left padding clears the traffic lights.
-      className={`flex h-[54px] flex-none items-center gap-[14px] border-b border-lines bg-panel pr-[14px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag] [&_input]:[-webkit-app-region:no-drag] ${
+      className={`wk-drag-strip flex h-[54px] flex-none items-center gap-[14px] border-b border-lines bg-panel pr-[14px] ${
         isMac ? "pl-[82px]" : "pl-4"
       }`}
     >

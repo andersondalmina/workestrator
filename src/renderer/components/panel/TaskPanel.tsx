@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { OpenWorktreeButton } from "./OpenWorktreeButton";
 import { ReviewResult } from "./ReviewResult";
 import { TaskReviews } from "./TaskReviews";
@@ -6,10 +6,14 @@ import { COLUMNS, TONE } from "../../data/board";
 import { isReviewable } from "../../store/selectors";
 import { useWorkspace } from "../../store/WorkspaceProvider";
 import type { BoardTask, Check, TimelineEvent } from "../../types";
-import { CloseIcon } from "../icons";
+import { CloseIcon, CollapseIcon, ExpandIcon } from "../icons";
 
 const SECTION_LABEL =
   "font-sans text-[11.5px] leading-none font-medium tracking-[0.07em] text-fg4 uppercase";
+
+/** The square, outlined button the header's icon-only controls all wear. */
+const ICON_BUTTON =
+  "flex size-8 flex-none items-center justify-center rounded-[7px] border border-lines hover:bg-panel2";
 
 /** Falls back to a summary line when a task carries no recorded history. */
 function timelineFor(task: BoardTask): TimelineEvent[] {
@@ -48,6 +52,7 @@ function platformName(task: BoardTask): string {
 export function TaskPanel({ task }: { task: BoardTask }) {
   const { closeTask, reviewsFor, reviewingIds, startReview, openReview, openReviewBusy } =
     useWorkspace();
+  const [expanded, setExpanded] = useState(false);
   const column = COLUMNS.find((entry) => entry.id === task.col);
   const checks = checksFor(task);
   const reviews = reviewsFor(task.id);
@@ -62,8 +67,20 @@ export function TaskPanel({ task }: { task: BoardTask }) {
     { k: "Updated", v: task.time },
   ];
 
+  // Expanded, the drawer is as wide as the window, which is far wider than a
+  // column of prose wants to be: every band keeps its full-width border and
+  // centres its contents inside it.
+  const contentWidth = expanded ? "mx-auto w-full max-w-[880px]" : "";
+  const ToggleIcon = expanded ? CollapseIcon : ExpandIcon;
+
   return (
-    <div className="fixed inset-0 z-20 flex justify-end">
+    // The drawer covers the top bar, and that strip is the window's drag
+    // region. A drag region keeps taking the mouse even when something is
+    // painted over it, which swallowed every click on the header controls in
+    // the top 54px — so the whole overlay opts back out of it, and the
+    // drawer's own header hands a strip back (see below). Without that the
+    // window would have nothing left to drag by while a task is open.
+    <div className="fixed inset-0 z-20 flex justify-end [-webkit-app-region:no-drag]">
       <button
         type="button"
         className="absolute inset-0 animate-wk-fade cursor-default bg-black/[0.32]"
@@ -72,13 +89,27 @@ export function TaskPanel({ task }: { task: BoardTask }) {
       />
 
       <aside
-        className="relative flex h-full w-[620px] max-w-[92vw] animate-wk-in flex-col border-l border-line bg-panel shadow-drawer"
+        className={`relative flex h-full animate-wk-in flex-col border-l border-line bg-panel shadow-drawer ${
+          expanded ? "w-full" : "w-[620px] max-w-[92vw]"
+        }`}
         role="dialog"
         aria-modal="true"
         aria-label={task.title}
       >
-        <header className="flex-none border-b border-lines px-[18px] py-4">
-          <div className="flex items-start gap-3">
+        {/* The drawer sits where the title bar was, so it takes over the job of
+            being the strip the window is dragged by. */}
+        <header className="wk-drag-strip flex-none border-b border-lines px-[18px] py-4">
+          <div className={`flex items-start gap-3 ${contentWidth}`}>
+            <button
+              type="button"
+              className={ICON_BUTTON}
+              onClick={() => setExpanded((isExpanded) => !isExpanded)}
+              aria-pressed={expanded}
+              aria-label="Expand the panel to full width"
+              title="Expand the panel to full width"
+            >
+              <ToggleIcon size={14} color="var(--fg3)" />
+            </button>
             <div className="min-w-0 flex-1">
               <div className="mb-2 flex items-center gap-2">
                 <span className="size-2 rounded-[3px]" style={{ background: column?.color }} />
@@ -94,13 +125,8 @@ export function TaskPanel({ task }: { task: BoardTask }) {
               </div>
             </div>
             <OpenWorktreeButton task={task} />
-            <button
-              type="button"
-              className="flex size-7 flex-none items-center justify-center rounded-[7px] border border-lines hover:bg-panel2"
-              onClick={closeTask}
-              aria-label="Close"
-            >
-              <CloseIcon size={13} color="var(--fg3)" />
+            <button type="button" className={ICON_BUTTON} onClick={closeTask} aria-label="Close">
+              <CloseIcon size={14} color="var(--fg3)" />
             </button>
           </div>
         </header>
@@ -110,11 +136,13 @@ export function TaskPanel({ task }: { task: BoardTask }) {
             drawer. It brings its own scrolling with it, because a feed that
             follows the agent down has to know what it is scrolling. */}
         {openReview || openReviewBusy ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-3 px-[18px] pt-4 pb-5">
+          <div className={`flex min-h-0 flex-1 flex-col gap-3 px-[18px] pt-4 pb-5 ${contentWidth}`}>
             <ReviewResult review={openReview} />
           </div>
         ) : (
-          <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-[18px] pt-4 pb-5">
+          <div
+            className={`flex flex-1 flex-col gap-5 overflow-y-auto px-[18px] pt-4 pb-5 ${contentWidth}`}
+          >
             <dl className="m-0 grid grid-cols-[84px_1fr] items-baseline gap-x-[14px] gap-y-[9px]">
               {meta.map((row) => (
                 <Fragment key={row.k}>
@@ -208,37 +236,39 @@ export function TaskPanel({ task }: { task: BoardTask }) {
           </div>
         )}
 
-        <footer className="flex flex-none items-center gap-2 border-t border-lines px-[18px] py-3">
-          {/* The panel's primary action is always the review: a task the app
-              made up itself has no pull request to hand an agent. */}
-          <button
-            type="button"
-            className={`rounded-lg bg-btn px-[14px] py-[9px] font-sans text-[14px] leading-none font-semibold text-btnfg ${
-              reviewing || !isReviewable(task)
-                ? "cursor-default opacity-50"
-                : "hover:opacity-[0.88]"
-            } ${reviewing ? "animate-wk-pulse" : ""}`}
-            onClick={() => startReview(task)}
-            disabled={reviewing || !isReviewable(task)}
-            title={
-              isReviewable(task)
-                ? `Checks #${task.pr} out and has the review agent read it`
-                : "This task has no pull request to review yet"
-            }
-          >
-            {reviewing ? "Reviewing…" : "Review"}
-          </button>
-          <button
-            type="button"
-            className="rounded-lg border border-lines px-[13px] py-[9px] font-sans text-[14px] leading-none font-medium text-fg2 hover:border-line hover:text-fg"
-            onClick={() => window.workestrator?.openExternal(remoteUrl(task))}
-          >
-            Open on {platformName(task)}
-          </button>
-          <div className="flex-1" />
-          <span className="font-mono text-[11.5px] leading-none font-normal text-fg4">
-            esc to close
-          </span>
+        <footer className="flex-none border-t border-lines px-[18px] py-3">
+          <div className={`flex items-center gap-2 ${contentWidth}`}>
+            {/* The panel's primary action is always the review: a task the app
+                made up itself has no pull request to hand an agent. */}
+            <button
+              type="button"
+              className={`rounded-lg bg-btn px-[14px] py-[9px] font-sans text-[14px] leading-none font-semibold text-btnfg ${
+                reviewing || !isReviewable(task)
+                  ? "cursor-default opacity-50"
+                  : "hover:opacity-[0.88]"
+              } ${reviewing ? "animate-wk-pulse" : ""}`}
+              onClick={() => startReview(task)}
+              disabled={reviewing || !isReviewable(task)}
+              title={
+                isReviewable(task)
+                  ? `Checks #${task.pr} out and has the review agent read it`
+                  : "This task has no pull request to review yet"
+              }
+            >
+              {reviewing ? "Reviewing…" : "Review"}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-lines px-[13px] py-[9px] font-sans text-[14px] leading-none font-medium text-fg2 hover:border-line hover:text-fg"
+              onClick={() => window.workestrator?.openExternal(remoteUrl(task))}
+            >
+              Open on {platformName(task)}
+            </button>
+            <div className="flex-1" />
+            <span className="font-mono text-[11.5px] leading-none font-normal text-fg4">
+              esc to close
+            </span>
+          </div>
         </footer>
       </aside>
     </div>
