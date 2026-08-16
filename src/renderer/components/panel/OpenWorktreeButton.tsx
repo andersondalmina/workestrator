@@ -59,14 +59,14 @@ export function OpenWorktreeButton({ task }: { task: BoardTask }) {
           surfaces: the reason it is disabled is hung on the frame around it,
           which is still hoverable. */}
       <div
-        className={`flex h-7 items-stretch overflow-hidden rounded-[7px] border border-lines ${
+        className={`flex h-8 items-stretch overflow-hidden rounded-[7px] border border-lines ${
           disabled ? "opacity-50" : ""
         }`}
         title={disabled ? reason : undefined}
       >
         <button
           type="button"
-          className={`flex w-7 items-center justify-center ${
+          className={`flex w-8 items-center justify-center ${
             disabled ? "cursor-default" : "hover:bg-panel2"
           }`}
           onClick={() => open(primary.id)}

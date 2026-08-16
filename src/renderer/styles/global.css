@@ -93,6 +93,20 @@
   }
 }
 
+/*
+ * The window has no native title bar, so a surface has to volunteer to be the
+ * strip it is dragged by — and a drag region keeps taking the mouse from every
+ * control inside it, so the controls have to opt back out. Both halves of that
+ * bargain live here, because more than one surface makes it.
+ */
+@utility wk-drag-strip {
+  -webkit-app-region: drag;
+
+  & :is(button, input) {
+    -webkit-app-region: no-drag;
+  }
+}
+
 @layer base {
   body {
     @apply m-0 overflow-hidden bg-bg font-sans text-fg antialiased;

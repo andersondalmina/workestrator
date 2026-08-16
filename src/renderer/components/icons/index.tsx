@@ -70,6 +70,26 @@ export function RefreshIcon(props: IconProps) {
   );
 }
 
+/** Arrows pushing apart: the drawer taking the whole window. */
+export function ExpandIcon(props: IconProps) {
+  return (
+    <Svg strokeWidth={1.5} {...props}>
+      <path d="M6.5 8H2M4.2 5.8 2 8l2.2 2.2" strokeLinejoin="round" />
+      <path d="M9.5 8H14M11.8 5.8 14 8l-2.2 2.2" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** The same arrows drawn back in: the drawer returning to its width. */
+export function CollapseIcon(props: IconProps) {
+  return (
+    <Svg strokeWidth={1.5} {...props}>
+      <path d="M2 8h4.5M4.3 5.8 6.5 8l-2.2 2.2" strokeLinejoin="round" />
+      <path d="M14 8H9.5M11.7 5.8 9.5 8l2.2 2.2" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function ThemeIcon(props: IconProps) {
   return (
     <Svg strokeWidth={1.3} {...props}>
